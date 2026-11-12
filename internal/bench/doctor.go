@@ -46,7 +46,7 @@ func Doctor(ctx context.Context, cfg Config, out io.Writer) error {
 			}
 			return nil
 		}},
-		{"Fanout metrics", func() error {
+		{"Pitot metrics", func() error {
 			if runner.client == nil {
 				runner.client = defaultHTTPClient()
 			}
@@ -69,18 +69,18 @@ func Doctor(ctx context.Context, cfg Config, out io.Writer) error {
 			}
 			found := false
 			for _, s := range snap.samples {
-				if s.name == "fanout_ingest_rows_total" {
+				if s.name == "pitot_ingest_rows_total" {
 					found = true
 					break
 				}
 			}
 			if !found {
-				return fmt.Errorf("fanout_ingest_rows_total absent")
+				return fmt.Errorf("pitot_ingest_rows_total absent")
 			}
 			return nil
 		}},
 	}
-	fmt.Fprintln(out, "Fanout Bench doctor")
+	fmt.Fprintln(out, "Pitot Bench doctor")
 	failed := false
 	for _, check := range checks {
 		if err := check.run(); err != nil {

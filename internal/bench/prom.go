@@ -162,9 +162,9 @@ func (s *snapshot) total(name string, labels map[string]string) float64 {
 
 func acceptedCounts(s *snapshot) Counts {
 	return Counts{
-		Spans:        s.total("fanout_ingest_rows_total", map[string]string{"signal": "spans"}),
-		LogRecords:   s.total("fanout_ingest_rows_total", map[string]string{"signal": "logs"}),
-		MetricPoints: s.total("fanout_ingest_rows_total", map[string]string{"signal": "metrics"}),
+		Spans:        s.total("pitot_ingest_rows_total", map[string]string{"signal": "spans"}),
+		LogRecords:   s.total("pitot_ingest_rows_total", map[string]string{"signal": "logs"}),
+		MetricPoints: s.total("pitot_ingest_rows_total", map[string]string{"signal": "metrics"}),
 	}
 }
 

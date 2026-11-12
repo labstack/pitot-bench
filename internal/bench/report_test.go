@@ -11,7 +11,14 @@ import (
 )
 
 func fixtureReport() Report {
-	return Report{SchemaVersion: SchemaVersion, RunID: "test", StartedAt: time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC), Build: Build{HarnessVersion: "v1", HarnessCommit: "abc", TelemetrygenVersion: "v0.157.0", FanoutVersion: "v2026.10.1-alpha"}, Host: Host{OS: "linux", Architecture: "amd64", CPUModel: "AMD EPYC", LogicalCPUs: 8, MemoryBytes: 32 << 30, GeneratorLocal: true}, Settings: Settings{Preset: "quick", Transport: "plaintext gRPC", BatchSize: 1000, SampleSeconds: 1, Methodology: "accepted"}, WorkloadSHA256: strings.Repeat("a", 64), Trials: []Trial{{Spec: PhaseSpec{Name: "traces", Signal: Traces, Kind: "sweep", ProcessesPerSignal: 1, WorkersPerProcess: 2}, ElapsedSeconds: 5, OfferedPerSecond: 2000, AcceptedPerSecond: 1900, AcceptanceRatio: .95, Accepted: Counts{Spans: 9500}, Resources: Resources{AverageCPUCores: 1.2, PeakRSSBytes: 100 << 20}, Classification: "target-sustained"}}, Summary: Summary{PeakTraces: Peak{"traces", 2000, 1900, 1.2, 100 << 20}, Passed: true, Gates: []Gate{{"counters", true, "ok"}}, Warnings: []string{"synthetic"}}, ReproductionCommand: "FANOUT_BENCH_INGEST_TOKEN=… fanout-bench run"}
+	return Report{SchemaVersion: SchemaVersion, RunID: "test", StartedAt: time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC), Build: Build{HarnessVersion: "v1", HarnessCommit: "abc", TelemetrygenVersion: "v0.157.0", PitotVersion: "v2026.11.5-alpha"}, Host: Host{OS: "linux", Architecture: "amd64", CPUModel: "AMD EPYC", LogicalCPUs: 8, MemoryBytes: 32 << 30, GeneratorLocal: true}, Settings: Settings{Preset: "quick", Transport: "plaintext gRPC", BatchSize: 1000, SampleSeconds: 1, Methodology: "accepted"}, WorkloadSHA256: strings.Repeat("a", 64), Trials: []Trial{{Spec: PhaseSpec{Name: "traces", Signal: Traces, Kind: "sweep", ProcessesPerSignal: 1, WorkersPerProcess: 2}, ElapsedSeconds: 5, OfferedPerSecond: 2000, AcceptedPerSecond: 1900, AcceptanceRatio: .95, Accepted: Counts{Spans: 9500}, Resources: Resources{AverageCPUCores: 1.2, PeakRSSBytes: 100 << 20}, Classification: "target-sustained"}}, Summary: Summary{PeakTraces: Peak{"traces", 2000, 1900, 1.2, 100 << 20}, Passed: true, Gates: []Gate{{"counters", true, "ok"}}, Warnings: []string{"synthetic"}}, ReproductionCommand: "PITOT_BENCH_INGEST_TOKEN=… pitot-bench run"}
+}
+
+func TestProductRenameRefusesPreviousReportSchema(t *testing.T) {
+	_, err := LoadReport("../../published/2026-11-06-ccx33x2-v2026.11.0-alpha/report.json")
+	if err == nil {
+		t.Fatal("accepted the retired report contract")
+	}
 }
 
 func TestGeneratorCPUAndSustainedTopologyArtifacts(t *testing.T) {
@@ -86,7 +93,7 @@ func TestArtifactsAreCompleteAndContainNoSecrets(t *testing.T) {
 
 func TestMarkdownExplainsAcceptedRowsAndLimits(t *testing.T) {
 	got := Markdown(fixtureReport())
-	for _, want := range []string{"Fanout accepted/s", "fanout_ingest_rows_total", "Complete phase breakdown", "Quality gates", "Methodology and limits", "same host"} {
+	for _, want := range []string{"Pitot accepted/s", "pitot_ingest_rows_total", "Complete phase breakdown", "Quality gates", "Methodology and limits", "same host"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %q", want)
 		}
@@ -94,14 +101,14 @@ func TestMarkdownExplainsAcceptedRowsAndLimits(t *testing.T) {
 }
 
 func TestReproductionCommandPutsSecretEnvironmentFirst(t *testing.T) {
-	got := reproductionCommand(Config{Preset: "quick", Endpoint: "localhost:7520", MetricsURL: "http://localhost", FanoutVersion: "x", Repeat: 1, QueryURL: "http://localhost", QueryRate: 5})
-	if !strings.HasPrefix(got, "FANOUT_BENCH_INGEST_TOKEN=… FANOUT_BENCH_QUERY_COOKIE=… fanout-bench run") {
+	got := reproductionCommand(Config{Preset: "quick", Endpoint: "localhost:7520", MetricsURL: "http://localhost", PitotVersion: "x", Repeat: 1, QueryURL: "http://localhost", QueryRate: 5})
+	if !strings.HasPrefix(got, "PITOT_BENCH_INGEST_TOKEN=… PITOT_BENCH_QUERY_COOKIE=… pitot-bench run") {
 		t.Fatalf("bad command: %s", got)
 	}
 }
 
 func TestRemoteReproductionCommandIncludesSSHConnection(t *testing.T) {
-	got := reproductionCommand(Config{Host: "root@192.0.2.10", SSHKnownHosts: "/tmp/run/known_hosts", SSHPort: 2222, SSHIdentity: "/keys/bench key", Preset: "quick", FanoutVersion: "v2026.10.1-alpha", TelemetrygenVersion: "v0.157.0", Repeat: 1, BatchSize: 1000, SampleInterval: time.Second, Cooldown: time.Second})
+	got := reproductionCommand(Config{Host: "root@192.0.2.10", SSHKnownHosts: "/tmp/run/known_hosts", SSHPort: 2222, SSHIdentity: "/keys/bench key", Preset: "quick", PitotVersion: "v2026.11.5-alpha", TelemetrygenVersion: "v0.157.0", Repeat: 1, BatchSize: 1000, SampleInterval: time.Second, Cooldown: time.Second})
 	for _, want := range []string{"--host 'root@<host>'", "--ssh-port 2222", "--ssh-identity '/keys/bench key'"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("command missing %q: %s", want, got)
@@ -251,14 +258,14 @@ func TestSplitHostPlacementAndDescriptionRecordedAndRendered(t *testing.T) {
 
 func TestReproductionCommandRedactsGeneratorHostAndDropsAddresses(t *testing.T) {
 	for _, host := range []string{"root@192.0.2.11", "bench@generator.example", "root@[2001:db8::3]", "192.0.2.11"} {
-		cfg := Config{Host: "root@192.0.2.10", GeneratorHost: host, GeneratorAddress: "10.77.0.3", FanoutListen: "10.77.0.2", GeneratorSSH: "root@10.77.0.3", GeneratorSSHIdentity: "/stage/key", GeneratorSSHKnownHosts: "/stage/known_hosts", GeneratorHostDescription: "Hetzner ccx43"}
+		cfg := Config{Host: "root@192.0.2.10", GeneratorHost: host, GeneratorAddress: "10.77.0.3", PitotListen: "10.77.0.2", GeneratorSSH: "root@10.77.0.3", GeneratorSSHIdentity: "/stage/key", GeneratorSSHKnownHosts: "/stage/known_hosts", GeneratorHostDescription: "Hetzner ccx43"}
 		got := reproductionCommand(cfg)
-		for _, want := range []string{"--host 'root@<host>'", "--generator-host 'root@<generator-host>'", "--generator-address '<generator-address>'", "--fanout-listen '<fanout-listen>'", "--generator-host-description 'Hetzner ccx43'"} {
+		for _, want := range []string{"--host 'root@<host>'", "--generator-host 'root@<generator-host>'", "--generator-address '<generator-address>'", "--pitot-listen '<pitot-listen>'", "--generator-host-description 'Hetzner ccx43'"} {
 			if !strings.Contains(got, want) {
 				t.Errorf("missing %q in %s", want, got)
 			}
 		}
-		for _, unwanted := range []string{host, "192.0.2.10", cfg.GeneratorAddress, cfg.FanoutListen, "--generator-ssh", "/stage/"} {
+		for _, unwanted := range []string{host, "192.0.2.10", cfg.GeneratorAddress, cfg.PitotListen, "--generator-ssh", "/stage/"} {
 			if strings.Contains(got, unwanted) {
 				t.Errorf("unexpected %q in %s", unwanted, got)
 			}

@@ -8,7 +8,7 @@ if [[ ${1:-} == --parallel-groups ]]; then
 fi
 
 if [[ $# -eq 0 ]]; then
-    echo "Usage: scripts/hetzner.sh [--parallel-groups] <fanout-bench run flags…> [-- <fanout-bench run flags…>]…" >&2
+    echo "Usage: scripts/hetzner.sh [--parallel-groups] <pitot-bench run flags…> [-- <pitot-bench run flags…>]…" >&2
     echo "Groups share one pair by default; --parallel-groups gives each its own pair. SSH settings must agree." >&2
     exit 2
 fi
@@ -77,11 +77,11 @@ if [[ $group_length -eq 0 ]]; then
 fi
 validate_group "${group_args[@]}"
 
-: "${FANOUT_BENCH_HCLOUD_SSH_KEY:?Set FANOUT_BENCH_HCLOUD_SSH_KEY to a registered Hetzner SSH key name (or comma-separated names)}"
-server_type=${FANOUT_BENCH_HCLOUD_TYPE:-ccx33}
-generator_type=${FANOUT_BENCH_HCLOUD_GENERATOR_TYPE:-ccx33}
-location=${FANOUT_BENCH_HCLOUD_LOCATION:-fsn1}
-image=${FANOUT_BENCH_HCLOUD_IMAGE:-ubuntu-24.04}
+: "${PITOT_BENCH_HCLOUD_SSH_KEY:?Set PITOT_BENCH_HCLOUD_SSH_KEY to a registered Hetzner SSH key name (or comma-separated names)}"
+server_type=${PITOT_BENCH_HCLOUD_TYPE:-ccx33}
+generator_type=${PITOT_BENCH_HCLOUD_GENERATOR_TYPE:-ccx33}
+location=${PITOT_BENCH_HCLOUD_LOCATION:-fsn1}
+image=${PITOT_BENCH_HCLOUD_IMAGE:-ubuntu-24.04}
 
 for command in hcloud ssh go just od; do
     if ! command -v "$command" >/dev/null 2>&1; then
@@ -93,7 +93,7 @@ done
 repo_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_dir"
 # Parallel children reuse the binary built by their parent.
-if [[ ${FANOUT_BENCH_GROUP_CHILD:-} != 1 ]]; then
+if [[ ${PITOT_BENCH_GROUP_CHILD:-} != 1 ]]; then
     just build
 fi
 
@@ -145,7 +145,7 @@ if [[ $parallel_groups == true ]]; then
             child_args+=(--output "$parallel_output/group-$group_index")
         fi
         launching_group=true
-        FANOUT_BENCH_GROUP_CHILD=1 FANOUT_BENCH_GROUP_INDEX=$group_index \
+        PITOT_BENCH_GROUP_CHILD=1 PITOT_BENCH_GROUP_INDEX=$group_index \
             bash "$repo_dir/scripts/hetzner.sh" "${child_args[@]}" <&0 &
         pair_pids+=("$!")
         launching_group=false
@@ -169,7 +169,7 @@ if [[ $parallel_groups == true ]]; then
 fi
 
 key_args=()
-IFS=',' read -r -a keys <<< "$FANOUT_BENCH_HCLOUD_SSH_KEY"
+IFS=',' read -r -a keys <<< "$PITOT_BENCH_HCLOUD_SSH_KEY"
 for key in "${keys[@]}"; do
     if [[ -z "$key" ]]; then
         echo "Hetzner SSH key names must not be empty" >&2
@@ -178,16 +178,16 @@ for key in "${keys[@]}"; do
     key_args+=(--ssh-key "$key")
 done
 
-run_dir=$(mktemp -d "${TMPDIR:-/tmp}/fanout-bench-hetzner.XXXXXX")
+run_dir=$(mktemp -d "${TMPDIR:-/tmp}/pitot-bench-hetzner.XXXXXX")
 known_hosts="$run_dir/known_hosts"
 touch "$known_hosts"
 nonce=$(od -An -N4 -tx1 /dev/urandom | tr -d ' \n')
-name="fanout-bench-$(date -u +%Y%m%dT%H%M%SZ)-$nonce"
-fanout_name="$name-fanout"
+name="pitot-bench-$(date -u +%Y%m%dT%H%M%SZ)-$nonce"
+pitot_name="$name-pitot"
 generator_name="$name-generator"
-printf 'Hetzner pair: group=%s Fanout=%s generator=%s network=%s\n' "${FANOUT_BENCH_GROUP_INDEX:-shared}" "$fanout_name" "$generator_name" "$name"
+printf 'Hetzner pair: group=%s Pitot=%s generator=%s network=%s\n' "${PITOT_BENCH_GROUP_INDEX:-shared}" "$pitot_name" "$generator_name" "$name"
 network_attempted=false
-fanout_attempted=false
+pitot_attempted=false
 generator_attempted=false
 # Deletion can race an interrupted create. Confirm absence rather than treating
 # a missing resource as a cleanup failure; retry API and transient state errors.
@@ -199,12 +199,12 @@ delete_resource() {
         if hcloud "$kind" delete "$resource" >/dev/null; then
             return 0
         fi
-        if names=$(hcloud "$kind" list --selector purpose=fanout-bench -o noheader -o columns=name) &&
+        if names=$(hcloud "$kind" list --selector purpose=pitot-bench -o noheader -o columns=name) &&
             [[ $'\n'$names$'\n' != *$'\n'$resource$'\n'* ]]; then
             absent=true
             for ((check = 0; check < 5; check++)); do
                 sleep 2
-                if ! names=$(hcloud "$kind" list --selector purpose=fanout-bench -o noheader -o columns=name) ||
+                if ! names=$(hcloud "$kind" list --selector purpose=pitot-bench -o noheader -o columns=name) ||
                     [[ $'\n'$names$'\n' == *$'\n'$resource$'\n'* ]]; then
                     absent=false
                     break
@@ -227,8 +227,8 @@ cleanup() {
     local status=$?
     trap - EXIT
     trap '' INT TERM
-    if [[ $fanout_attempted == true ]]; then
-        delete_resource server "$fanout_name" || status=1
+    if [[ $pitot_attempted == true ]]; then
+        delete_resource server "$pitot_name" || status=1
     fi
     if [[ $generator_attempted == true ]]; then
         delete_resource server "$generator_name" || status=1
@@ -292,22 +292,22 @@ if [[ -z "$zone" ]]; then
 fi
 network_attempted=true
 run_create hcloud network create --name "$name" --ip-range 10.77.0.0/16 \
-    --label purpose=fanout-bench >/dev/null
+    --label purpose=pitot-bench >/dev/null
 run_create hcloud network add-subnet "$name" --type cloud --network-zone "$zone" \
     --ip-range 10.77.0.0/24 >/dev/null
-fanout_attempted=true
-run_create hcloud server create --name "$fanout_name" --type "$server_type" \
-    --location "$location" --image "$image" --label purpose=fanout-bench \
+pitot_attempted=true
+run_create hcloud server create --name "$pitot_name" --type "$server_type" \
+    --location "$location" --image "$image" --label purpose=pitot-bench \
     --network "$name" "${key_args[@]}" >/dev/null
 generator_attempted=true
 run_create hcloud server create --name "$generator_name" --type "$generator_type" \
-    --location "$location" --image "$image" --label purpose=fanout-bench \
+    --location "$location" --image "$image" --label purpose=pitot-bench \
     --network "$name" "${key_args[@]}" >/dev/null
-fanout_ip=$(hcloud server ip "$fanout_name")
+pitot_ip=$(hcloud server ip "$pitot_name")
 generator_ip=$(hcloud server ip "$generator_name")
-fanout_private=$(hcloud server describe "$fanout_name" -o 'format={{(index .PrivateNet 0).IP}}')
+pitot_private=$(hcloud server describe "$pitot_name" -o 'format={{(index .PrivateNet 0).IP}}')
 generator_private=$(hcloud server describe "$generator_name" -o 'format={{(index .PrivateNet 0).IP}}')
-if [[ -z "$fanout_ip" || -z "$generator_ip" || -z "$fanout_private" || -z "$generator_private" ]]; then
+if [[ -z "$pitot_ip" || -z "$generator_ip" || -z "$pitot_private" || -z "$generator_private" ]]; then
     echo "Hetzner servers must have public and private IPv4 addresses" >&2
     exit 1
 fi
@@ -319,7 +319,7 @@ ssh_args=(-o BatchMode=yes -o StrictHostKeyChecking=accept-new
 if [[ -n "$ssh_identity" ]]; then
     ssh_args+=(-i "$ssh_identity")
 fi
-for ip in "$fanout_ip" "$generator_ip"; do
+for ip in "$pitot_ip" "$generator_ip"; do
     deadline=$((SECONDS + 300))
     until run_child ssh "${ssh_args[@]}" "root@$ip" true 2>/dev/null; do
         if (( SECONDS >= deadline )); then
@@ -334,10 +334,10 @@ statuses=()
 status=0
 offset=1
 for group_length in "${group_lengths[@]}"; do
-    bin/fanout-bench run "${@:offset:group_length}" \
-        --host "root@$fanout_ip" --ssh-known-hosts "$known_hosts" \
+    bin/pitot-bench run "${@:offset:group_length}" \
+        --host "root@$pitot_ip" --ssh-known-hosts "$known_hosts" \
         --generator-host "root@$generator_ip" --generator-address "$generator_private" \
-        --fanout-listen "$fanout_private" \
+        --pitot-listen "$pitot_private" \
         --host-description "Hetzner Cloud $server_type, $location, $image" \
         --generator-host-description "Hetzner Cloud $generator_type, $location, $image" <&0 &
     benchmark_pid=$!

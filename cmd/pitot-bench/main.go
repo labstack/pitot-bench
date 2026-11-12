@@ -11,7 +11,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/labstack/fanout-bench/internal/bench"
+	"github.com/labstack/pitot-bench/internal/bench"
 )
 
 var version = "dev"
@@ -50,12 +50,12 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, `fanout-bench — reproducible OpenTelemetry performance evidence
+	fmt.Fprintln(os.Stderr, `pitot-bench — reproducible OpenTelemetry performance evidence
 
 Usage:
-  fanout-bench doctor [flags]  verify telemetrygen, authentication, and metrics
-  fanout-bench run [flags]     provision a host and execute a benchmark suite
-  fanout-bench render [flags]  regenerate Markdown from report.json
+  pitot-bench doctor [flags]  verify telemetrygen, authentication, and metrics
+  pitot-bench run [flags]     provision a host and execute a benchmark suite
+  pitot-bench render [flags]  regenerate Markdown from report.json
 
 Secrets are accepted only through environment variables and are never persisted.`)
 }
@@ -70,36 +70,36 @@ func commonFlags(name string, args []string) (bench.Config, error) {
 	fs.StringVar(&cfg.HostDescription, "host-description", "", "host description recorded alongside hardware evidence")
 	if name == "run" {
 		fs.StringVar(&cfg.GeneratorHost, "generator-host", "", "SSH target to provision as a separate generator host")
-		fs.StringVar(&cfg.GeneratorAddress, "generator-address", "", "generator host IP reachable from the Fanout host")
-		fs.StringVar(&cfg.FanoutListen, "fanout-listen", "", "Fanout host IP reachable from the generator host")
+		fs.StringVar(&cfg.GeneratorAddress, "generator-address", "", "generator host IP reachable from the Pitot host")
+		fs.StringVar(&cfg.PitotListen, "pitot-listen", "", "Pitot host IP reachable from the generator host")
 		fs.StringVar(&cfg.GeneratorHostDescription, "generator-host-description", "", "generator host description recorded in the report")
-		fs.StringVar(&cfg.FanoutBinary, "fanout-binary", "", "local Linux Fanout binary for a remote run instead of a release; --fanout-version is then a non-release label and the report is marked not publishable")
+		fs.StringVar(&cfg.PitotBinary, "pitot-binary", "", "local Linux Pitot binary for a remote run instead of a release; --pitot-version is then a non-release label and the report is marked not publishable")
 	}
 	fs.IntVar(&cfg.SSHPort, "ssh-port", 22, "SSH port")
 	fs.BoolVar(&cfg.KeepRemote, "keep-remote", false, "preserve the isolated remote run directory after downloading artifacts")
 	fs.StringVar(&cfg.SignalSelection, "signals", "all", "sweeps: all or mixed (skips single-signal sweeps)")
 	fs.StringVar(&cfg.Preset, "preset", "standard", "suite: quick, standard, local, validate, or publish")
-	fs.StringVar(&cfg.Endpoint, "endpoint", "localhost:7520", "Fanout OTLP/gRPC endpoint")
-	fs.StringVar(&cfg.MetricsURL, "metrics-url", "http://localhost:7520/metrics", "Fanout Prometheus metrics URL (required evidence source)")
+	fs.StringVar(&cfg.Endpoint, "endpoint", "localhost:7520", "Pitot OTLP/gRPC endpoint")
+	fs.StringVar(&cfg.MetricsURL, "metrics-url", "http://localhost:7520/metrics", "Pitot Prometheus metrics URL (required evidence source)")
 	fs.BoolVar(&cfg.Insecure, "insecure", false, "use plaintext OTLP/gRPC")
 	fs.StringVar(&cfg.Telemetrygen, "telemetrygen", "./bin/telemetrygen", "path to pinned telemetrygen binary")
 	fs.StringVar(&cfg.TelemetrygenVersion, "telemetrygen-version", "v0.157.0", "version recorded for the generator binary")
 	fs.StringVar(&cfg.OutputDir, "output", "", "artifact directory (run command only)")
-	fs.StringVar(&tokenEnv, "token-env", "FANOUT_BENCH_INGEST_TOKEN", "environment variable containing the ingest bearer token")
-	fs.StringVar(&metricsTokenEnv, "metrics-token-env", "FANOUT_BENCH_METRICS_TOKEN", "environment variable containing an optional metrics bearer token")
-	fs.StringVar(&cfg.FanoutVersion, "fanout-version", "unknown", "Fanout release under test")
-	fs.StringVar(&cfg.FanoutCommit, "fanout-commit", "", "Fanout git commit under test")
-	fs.StringVar(&cfg.FanoutArtifact, "fanout-artifact", "", "Fanout binary or release artifact identity under test")
-	fs.StringVar(&cfg.DataDir, "data-dir", "", "local Fanout data directory for disk-growth evidence")
+	fs.StringVar(&tokenEnv, "token-env", "PITOT_BENCH_INGEST_TOKEN", "environment variable containing the ingest bearer token")
+	fs.StringVar(&metricsTokenEnv, "metrics-token-env", "PITOT_BENCH_METRICS_TOKEN", "environment variable containing an optional metrics bearer token")
+	fs.StringVar(&cfg.PitotVersion, "pitot-version", "unknown", "Pitot release under test")
+	fs.StringVar(&cfg.PitotCommit, "pitot-commit", "", "Pitot git commit under test")
+	fs.StringVar(&cfg.PitotArtifact, "pitot-artifact", "", "Pitot binary or release artifact identity under test")
+	fs.StringVar(&cfg.DataDir, "data-dir", "", "local Pitot data directory for disk-growth evidence")
 	fs.DurationVar(&cfg.SampleInterval, "sample-interval", time.Second, "server resource sampling interval")
 	fs.DurationVar(&cfg.GeneratorTimeout, "export-timeout", 30*time.Second, "telemetrygen export timeout")
 	fs.DurationVar(&cfg.Cooldown, "cooldown", 15*time.Second, "post-load retained-memory observation window")
 	fs.IntVar(&cfg.Repeat, "repeat", 1, "repeat every sweep topology")
-	fs.BoolVar(&cfg.SameHost, "same-host", false, "declare that Fanout and generators share a host")
+	fs.BoolVar(&cfg.SameHost, "same-host", false, "declare that Pitot and generators share a host")
 	fs.IntVar(&cfg.BatchSize, "batch-size", 1000, "telemetrygen OTLP batch size")
-	fs.StringVar(&cfg.QueryURL, "query-url", "", "Fanout HTTP base URL for authenticated read-under-write load")
+	fs.StringVar(&cfg.QueryURL, "query-url", "", "Pitot HTTP base URL for authenticated read-under-write load")
 	fs.Float64Var(&cfg.QueryRate, "query-rate", 0, "aggregate UI operations/s during mixed phases")
-	fs.StringVar(&queryCookieEnv, "query-cookie-env", "FANOUT_BENCH_QUERY_COOKIE", "environment variable containing the authenticated session Cookie header")
+	fs.StringVar(&queryCookieEnv, "query-cookie-env", "PITOT_BENCH_QUERY_COOKIE", "environment variable containing the authenticated session Cookie header")
 	fs.IntVar(&cfg.ProcessOverride, "processes", 0, "override sweep with one process count per signal")
 	fs.IntVar(&cfg.WorkerOverride, "workers", 0, "override workers per telemetrygen process")
 	fs.Float64Var(&cfg.RateOverride, "rate", 0, "override items/s per telemetrygen worker")
@@ -113,8 +113,8 @@ func commonFlags(name string, args []string) (bench.Config, error) {
 	if err := bench.ValidateGeneratorHosts(cfg); err != nil {
 		return cfg, err
 	}
-	if cfg.FanoutBinary != "" && cfg.Host == "" {
-		return cfg, errors.New("--fanout-binary requires a remote run with --host")
+	if cfg.PitotBinary != "" && cfg.Host == "" {
+		return cfg, errors.New("--pitot-binary requires a remote run with --host")
 	}
 	cfg.Token = os.Getenv(tokenEnv)
 	cfg.MetricsToken = os.Getenv(metricsTokenEnv)
@@ -161,16 +161,16 @@ func run(ctx context.Context, args []string) error {
 func managed(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("managed", flag.ContinueOnError)
 	var cfg bench.ManagedConfig
-	fs.StringVar(&cfg.FanoutPath, "fanout", "./fanout", "provisioned Fanout binary")
+	fs.StringVar(&cfg.PitotPath, "pitot", "./pitot", "provisioned Pitot binary")
 	fs.StringVar(&cfg.TelemetrygenPath, "telemetrygen", "./telemetrygen", "provisioned telemetrygen binary")
-	fs.StringVar(&cfg.Listen, "listen", "127.0.0.1", "Fanout listen IP for OTLP, metrics, and queries")
+	fs.StringVar(&cfg.Listen, "listen", "127.0.0.1", "Pitot listen IP for OTLP, metrics, and queries")
 	fs.StringVar(&cfg.GeneratorSSH, "generator-ssh", "", "SSH target for telemetrygen launches")
 	fs.IntVar(&cfg.GeneratorSSHPort, "generator-ssh-port", 22, "SSH port for telemetrygen launches")
 	fs.StringVar(&cfg.GeneratorSSHIdentity, "generator-ssh-identity", "", "ephemeral SSH private key for the generator host")
 	fs.StringVar(&cfg.GeneratorTelemetrygen, "generator-telemetrygen", "", "telemetrygen path on the generator host")
 	fs.StringVar(&cfg.OutputDir, "output", "./results", "remote evidence directory")
-	fs.StringVar(&cfg.FanoutVersion, "fanout-version", "unknown", "Fanout version")
-	fs.StringVar(&cfg.FanoutArtifact, "fanout-artifact", "", "verified release artifact identity")
+	fs.StringVar(&cfg.PitotVersion, "pitot-version", "unknown", "Pitot version")
+	fs.StringVar(&cfg.PitotArtifact, "pitot-artifact", "", "verified release artifact identity")
 	fs.StringVar(&cfg.SignalSelection, "signals", "all", "sweeps: all or mixed (skips single-signal sweeps)")
 	fs.StringVar(&cfg.Preset, "preset", "standard", "suite preset")
 	fs.IntVar(&cfg.Repeat, "repeat", 1, "sweep repetitions")

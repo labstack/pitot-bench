@@ -1,4 +1,4 @@
-module github.com/labstack/fanout-bench
+module github.com/labstack/pitot-bench
 
 go 1.27
 

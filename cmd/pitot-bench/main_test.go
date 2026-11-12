@@ -7,10 +7,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/fanout-bench/internal/bench"
+	"github.com/labstack/pitot-bench/internal/bench"
 )
 
-func TestLocalDefaultsUseSharedFanoutListener(t *testing.T) {
+func TestLocalDefaultsUseSharedPitotListener(t *testing.T) {
 	cfg, err := commonFlags("test", nil)
 	if err != nil {
 		t.Fatal(err)
@@ -27,7 +27,7 @@ func TestSplitReproductionCommandPassesValidationAfterSubstitution(t *testing.T)
 	}
 	cfg, err := commonFlags("run", []string{
 		"--host", "root@192.0.2.10", "--generator-host", "root@192.0.2.11",
-		"--generator-address", "10.77.0.3", "--fanout-listen", "10.77.0.2",
+		"--generator-address", "10.77.0.3", "--pitot-listen", "10.77.0.2",
 		"--ssh-port", "2222", "--telemetrygen", executable, "--preset", "validate", "--signals", "mixed",
 	})
 	if err != nil {
@@ -46,7 +46,7 @@ func TestSplitReproductionCommandPassesValidationAfterSubstitution(t *testing.T)
 	}
 	command := strings.NewReplacer(
 		"<host>", "192.0.2.20", "<generator-host>", "192.0.2.21",
-		"<generator-address>", "10.77.0.13", "<fanout-listen>", "10.77.0.12",
+		"<generator-address>", "10.77.0.13", "<pitot-listen>", "10.77.0.12",
 	).Replace(report.ReproductionCommand)
 	// Parse shell quoting without executing the reproduction command.
 	output, err := exec.Command("bash", "-c", "set -- "+command+"; printf '%s\\0' \"$@\"").Output()
@@ -62,7 +62,7 @@ func TestSplitReproductionCommandPassesValidationAfterSubstitution(t *testing.T)
 		t.Fatal("validation flags lost")
 	}
 	if reproduced.Host != "root@192.0.2.20" || reproduced.GeneratorHost != "root@192.0.2.21" ||
-		reproduced.GeneratorAddress != "10.77.0.13" || reproduced.FanoutListen != "10.77.0.12" || reproduced.SSHPort != 2222 {
+		reproduced.GeneratorAddress != "10.77.0.13" || reproduced.PitotListen != "10.77.0.12" || reproduced.SSHPort != 2222 {
 		t.Fatalf("reproduction lost topology: %+v", reproduced)
 	}
 }
@@ -78,12 +78,12 @@ func TestHostFlags(t *testing.T) {
 }
 
 func TestSplitFlagsRequiredTogetherAndRemoteOnly(t *testing.T) {
-	flags := [][]string{{"--generator-host", "root@generator.example"}, {"--generator-address", "10.77.0.3"}, {"--fanout-listen", "10.77.0.2"}}
+	flags := [][]string{{"--generator-host", "root@generator.example"}, {"--generator-address", "10.77.0.3"}, {"--pitot-listen", "10.77.0.2"}}
 	for mask := 0; mask < 8; mask++ {
 		for _, remote := range []bool{false, true} {
 			var args []string
 			if remote {
-				args = append(args, "--host", "root@fanout.example")
+				args = append(args, "--host", "root@pitot.example")
 			}
 			for i, pair := range flags {
 				if mask&(1<<i) != 0 {
@@ -95,7 +95,7 @@ func TestSplitFlagsRequiredTogetherAndRemoteOnly(t *testing.T) {
 			if (err == nil) != valid {
 				t.Errorf("args=%q: err=%v, valid=%t", args, err, valid)
 			}
-			if err == nil && mask == 7 && (cfg.GeneratorHost != flags[0][1] || cfg.GeneratorAddress != flags[1][1] || cfg.FanoutListen != flags[2][1]) {
+			if err == nil && mask == 7 && (cfg.GeneratorHost != flags[0][1] || cfg.GeneratorAddress != flags[1][1] || cfg.PitotListen != flags[2][1]) {
 				t.Errorf("split flags lost: %+v", cfg)
 			}
 		}
@@ -106,7 +106,7 @@ func TestSplitFlagsRequiredTogetherAndRemoteOnly(t *testing.T) {
 	if _, err := commonFlags("run", []string{"--generator-host-description", "generator"}); err == nil {
 		t.Fatal("local run accepted a generator description")
 	}
-	args := []string{"--host", "root@fanout.example", "--generator-host-description", "Hetzner ccx43"}
+	args := []string{"--host", "root@pitot.example", "--generator-host-description", "Hetzner ccx43"}
 	for _, pair := range flags {
 		args = append(args, pair...)
 	}
@@ -116,16 +116,16 @@ func TestSplitFlagsRequiredTogetherAndRemoteOnly(t *testing.T) {
 	}
 }
 
-func TestFanoutBinaryRequiresRemoteHost(t *testing.T) {
-	if _, err := commonFlags("run", []string{"--fanout-binary", "/tmp/fanout", "--fanout-version", "explore-test"}); err == nil {
-		t.Fatal("accepted --fanout-binary without --host")
+func TestPitotBinaryRequiresRemoteHost(t *testing.T) {
+	if _, err := commonFlags("run", []string{"--pitot-binary", "/tmp/pitot", "--pitot-version", "explore-test"}); err == nil {
+		t.Fatal("accepted --pitot-binary without --host")
 	}
-	cfg, err := commonFlags("run", []string{"--host", "root@192.0.2.10", "--fanout-binary", "/tmp/fanout", "--fanout-version", "explore-test"})
+	cfg, err := commonFlags("run", []string{"--host", "root@192.0.2.10", "--pitot-binary", "/tmp/pitot", "--pitot-version", "explore-test"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.FanoutBinary != "/tmp/fanout" {
-		t.Fatalf("fanout binary=%q", cfg.FanoutBinary)
+	if cfg.PitotBinary != "/tmp/pitot" {
+		t.Fatalf("pitot binary=%q", cfg.PitotBinary)
 	}
 }
 

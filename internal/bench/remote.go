@@ -22,42 +22,42 @@ import (
 )
 
 var sshTargetPattern = regexp.MustCompile(`^(?:[A-Za-z0-9._-]+@)?(?:[A-Za-z0-9._-]+|\[[0-9A-Fa-f:]+\])$`)
-var fanoutVersionPattern = regexp.MustCompile(`^v[0-9]{4}\.(?:[1-9]|1[0-2])\.(?:0|[1-9][0-9]*)(?:-(?:alpha|beta|rc))?$`)
+var pitotVersionPattern = regexp.MustCompile(`^v[0-9]{4}\.(?:[1-9]|1[0-2])\.(?:0|[1-9][0-9]*)(?:-(?:alpha|beta|rc))?$`)
 var unreleasedLabelPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
 
-// UnreleasedArtifactPrefix marks a Fanout binary supplied with --fanout-binary.
+// UnreleasedArtifactPrefix marks a Pitot binary supplied with --pitot-binary.
 // Such a build has no release checksum to verify against, so its results are
 // diagnostic and never publishable.
 const UnreleasedArtifactPrefix = "unreleased-local-binary"
 
-// ValidateFanoutSource checks the Fanout identity of a remote run: a published
+// ValidatePitotSource checks the Pitot identity of a remote run: a published
 // release by default, or a local binary with a label that cannot be mistaken
 // for a release.
-func ValidateFanoutSource(cfg Config) error {
-	if cfg.FanoutBinary == "" {
-		if cfg.FanoutVersion == "" || cfg.FanoutVersion == "unknown" {
-			return errors.New("--fanout-version is required for a remote run")
+func ValidatePitotSource(cfg Config) error {
+	if cfg.PitotBinary == "" {
+		if cfg.PitotVersion == "" || cfg.PitotVersion == "unknown" {
+			return errors.New("--pitot-version is required for a remote run")
 		}
-		if !fanoutVersionPattern.MatchString(cfg.FanoutVersion) {
-			return fmt.Errorf("invalid Fanout release %q: want vYYYY.M.N[-alpha|-beta|-rc]", cfg.FanoutVersion)
+		if !pitotVersionPattern.MatchString(cfg.PitotVersion) {
+			return fmt.Errorf("invalid Pitot release %q: want vYYYY.M.N[-alpha|-beta|-rc]", cfg.PitotVersion)
 		}
 		return nil
 	}
-	if cfg.FanoutVersion == "" || cfg.FanoutVersion == "unknown" {
-		return errors.New("--fanout-binary requires a --fanout-version label for the unreleased build")
+	if cfg.PitotVersion == "" || cfg.PitotVersion == "unknown" {
+		return errors.New("--pitot-binary requires a --pitot-version label for the unreleased build")
 	}
-	if fanoutVersionPattern.MatchString(cfg.FanoutVersion) {
-		return fmt.Errorf("--fanout-binary label %q looks like a release; use a non-release label such as branch-commit", cfg.FanoutVersion)
+	if pitotVersionPattern.MatchString(cfg.PitotVersion) {
+		return fmt.Errorf("--pitot-binary label %q looks like a release; use a non-release label such as branch-commit", cfg.PitotVersion)
 	}
-	if !unreleasedLabelPattern.MatchString(cfg.FanoutVersion) {
-		return fmt.Errorf("invalid unreleased Fanout label %q: want letters, digits, '.', '_' or '-'", cfg.FanoutVersion)
+	if !unreleasedLabelPattern.MatchString(cfg.PitotVersion) {
+		return fmt.Errorf("invalid unreleased Pitot label %q: want letters, digits, '.', '_' or '-'", cfg.PitotVersion)
 	}
-	info, err := os.Stat(cfg.FanoutBinary)
+	info, err := os.Stat(cfg.PitotBinary)
 	if err != nil {
-		return fmt.Errorf("--fanout-binary: %w", err)
+		return fmt.Errorf("--pitot-binary: %w", err)
 	}
 	if !info.Mode().IsRegular() {
-		return fmt.Errorf("--fanout-binary %s is not a regular file", cfg.FanoutBinary)
+		return fmt.Errorf("--pitot-binary %s is not a regular file", cfg.PitotBinary)
 	}
 	return nil
 }
@@ -65,19 +65,19 @@ func ValidateFanoutSource(cfg Config) error {
 // ValidateGeneratorHosts also runs before local execution, so partial split
 // configurations cannot silently fall back to same-host load.
 func ValidateGeneratorHosts(cfg Config) error {
-	if cfg.GeneratorHost == "" && cfg.GeneratorAddress == "" && cfg.FanoutListen == "" && cfg.GeneratorHostDescription == "" {
+	if cfg.GeneratorHost == "" && cfg.GeneratorAddress == "" && cfg.PitotListen == "" && cfg.GeneratorHostDescription == "" {
 		return nil
 	}
 	if cfg.Host == "" {
 		return errors.New("generator host flags require a remote run with --host")
 	}
-	if cfg.GeneratorHost == "" || cfg.GeneratorAddress == "" || cfg.FanoutListen == "" {
-		return errors.New("--generator-host, --generator-address, and --fanout-listen are required together")
+	if cfg.GeneratorHost == "" || cfg.GeneratorAddress == "" || cfg.PitotListen == "" {
+		return errors.New("--generator-host, --generator-address, and --pitot-listen are required together")
 	}
 	if !sshTargetPattern.MatchString(cfg.GeneratorHost) || strings.HasPrefix(cfg.GeneratorHost, "-") {
 		return fmt.Errorf("unsafe generator SSH target %q", cfg.GeneratorHost)
 	}
-	for _, address := range []string{cfg.GeneratorAddress, cfg.FanoutListen} {
+	for _, address := range []string{cfg.GeneratorAddress, cfg.PitotListen} {
 		if ip := net.ParseIP(address); ip == nil || ip.IsUnspecified() {
 			return fmt.Errorf("invalid host IP %q", address)
 		}
@@ -95,7 +95,7 @@ func RunRemote(ctx context.Context, cfg Config, version string, out io.Writer) e
 	if cfg.SSHPort < 1 || cfg.SSHPort > 65535 {
 		return fmt.Errorf("invalid SSH port %d", cfg.SSHPort)
 	}
-	if err := ValidateFanoutSource(cfg); err != nil {
+	if err := ValidatePitotSource(cfg); err != nil {
 		return err
 	}
 	if _, err := Plan(cfg); err != nil {
@@ -116,7 +116,7 @@ func RunRemote(ctx context.Context, cfg Config, version string, out io.Writer) e
 		}
 	}
 
-	fmt.Fprintf(out, "Fanout Bench remote provision\n  host       %s\n  release    %s\n  preset     %s × %d\n", cfg.Host, cfg.FanoutVersion, cfg.Preset, cfg.Repeat)
+	fmt.Fprintf(out, "Pitot Bench remote provision\n  host       %s\n  release    %s\n  preset     %s × %d\n", cfg.Host, cfg.PitotVersion, cfg.Preset, cfg.Repeat)
 	remoteOS, remoteArch, err := detectRemote(ctx, cfg)
 	if err != nil {
 		return err
@@ -139,7 +139,7 @@ func RunRemote(ctx context.Context, cfg Config, version string, out io.Writer) e
 		fmt.Fprintf(out, "  generator  %s (%s/%s)\n", generator.Host, generatorOS, generatorArch)
 	}
 
-	buildDir, err := os.MkdirTemp("", "fanout-bench-provision-*")
+	buildDir, err := os.MkdirTemp("", "pitot-bench-provision-*")
 	if err != nil {
 		return err
 	}
@@ -154,18 +154,18 @@ func RunRemote(ctx context.Context, cfg Config, version string, out io.Writer) e
 	if err != nil {
 		return fmt.Errorf("build telemetrygen: %w", err)
 	}
-	var fanoutPath, artifact string
-	if cfg.FanoutBinary != "" {
-		fmt.Fprintln(out, "  ◌ staging the unreleased local Fanout binary (not publishable)")
-		fanoutPath, artifact, err = stageLocalFanout(cfg.FanoutBinary, buildDir, remoteArch)
+	var pitotPath, artifact string
+	if cfg.PitotBinary != "" {
+		fmt.Fprintln(out, "  ◌ staging the unreleased local Pitot binary (not publishable)")
+		pitotPath, artifact, err = stageLocalPitot(cfg.PitotBinary, buildDir, remoteArch)
 		if err != nil {
-			return fmt.Errorf("stage local Fanout binary: %w", err)
+			return fmt.Errorf("stage local Pitot binary: %w", err)
 		}
 	} else {
-		fmt.Fprintln(out, "  ◌ downloading and verifying the Fanout release")
-		fanoutPath, artifact, err = fetchFanout(ctx, buildDir, cfg.FanoutVersion, remoteOS, remoteArch)
+		fmt.Fprintln(out, "  ◌ downloading and verifying the Pitot release")
+		pitotPath, artifact, err = fetchPitot(ctx, buildDir, cfg.PitotVersion, remoteOS, remoteArch)
 		if err != nil {
-			return fmt.Errorf("fetch Fanout release: %w", err)
+			return fmt.Errorf("fetch Pitot release: %w", err)
 		}
 	}
 
@@ -173,9 +173,9 @@ func RunRemote(ctx context.Context, cfg Config, version string, out io.Writer) e
 	if err != nil {
 		return err
 	}
-	stage := "/tmp/fanout-bench-" + time.Now().UTC().Format("20060102T150405Z") + "-" + suffix
+	stage := "/tmp/pitot-bench-" + time.Now().UTC().Format("20060102T150405Z") + "-" + suffix
 	generatorStage := stage + "-generator"
-	marker := "fanout-bench-" + suffix
+	marker := "pitot-bench-" + suffix
 	cleanup := func() {
 		if cfg.GeneratorHost != "" {
 			cleanupCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -194,11 +194,11 @@ func RunRemote(ctx context.Context, cfg Config, version string, out io.Writer) e
 			command = "rm -f -- " + shellQuote(stage+"/generator_key")
 		}
 		// Each host gets its own deadline: an unreachable generator must not
-		// prevent removal of the Fanout stage and its private key.
+		// prevent removal of the Pitot stage and its private key.
 		cleanupCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		if err := sshRun(cleanupCtx, cfg, io.Discard, command); err != nil {
-			fmt.Fprintf(out, "cleanup Fanout stage %s:%s: %v\n", cfg.Host, stage, err)
+			fmt.Fprintf(out, "cleanup Pitot stage %s:%s: %v\n", cfg.Host, stage, err)
 		}
 	}
 	defer cleanup()
@@ -207,7 +207,7 @@ func RunRemote(ctx context.Context, cfg Config, version string, out io.Writer) e
 	}
 
 	fmt.Fprintln(out, "  ◌ uploading architecture-matched binaries")
-	paths := []string{harnessPath, fanoutPath}
+	paths := []string{harnessPath, pitotPath}
 	if cfg.GeneratorHost == "" {
 		paths = append(paths, telemetrygenPath)
 	} else {
@@ -256,7 +256,7 @@ func RunRemote(ctx context.Context, cfg Config, version string, out io.Writer) e
 }
 
 func detectRemote(ctx context.Context, cfg Config) (string, string, error) {
-	output, err := sshOutput(ctx, cfg, `printf '__FANOUT_BENCH_PLATFORM__ %s %s\n' "$(uname -s)" "$(uname -m)"`)
+	output, err := sshOutput(ctx, cfg, `printf '__PITOT_BENCH_PLATFORM__ %s %s\n' "$(uname -s)" "$(uname -m)"`)
 	if err != nil {
 		return "", "", fmt.Errorf("inspect remote host: %w", err)
 	}
@@ -264,7 +264,7 @@ func detectRemote(ctx context.Context, cfg Config) (string, string, error) {
 }
 
 func parseRemotePlatform(output string) (string, string, error) {
-	const marker = "__FANOUT_BENCH_PLATFORM__"
+	const marker = "__PITOT_BENCH_PLATFORM__"
 	var fields []string
 	for _, line := range strings.Split(output, "\n") {
 		candidate := strings.Fields(line)
@@ -294,8 +294,8 @@ func buildHarness(ctx context.Context, dir, goos, goarch, version string) (strin
 	if err != nil {
 		return "", err
 	}
-	output := filepath.Join(dir, "fanout-bench")
-	cmd := exec.CommandContext(ctx, "go", "build", "-trimpath", "-ldflags", "-s -w -X main.version="+version, "-o", output, "./cmd/fanout-bench")
+	output := filepath.Join(dir, "pitot-bench")
+	cmd := exec.CommandContext(ctx, "go", "build", "-trimpath", "-ldflags", "-s -w -X main.version="+version, "-o", output, "./cmd/pitot-bench")
 	cmd.Dir = root
 	cmd.Env = append(os.Environ(), "GOOS="+goos, "GOARCH="+goarch, "CGO_ENABLED=0")
 	if data, err := cmd.CombinedOutput(); err != nil {
@@ -358,15 +358,15 @@ func moduleRoot() (string, error) {
 			dir = parent
 		}
 	}
-	return "", errors.New("cannot find fanout-bench go.mod; run remote provisioning from a source checkout")
+	return "", errors.New("cannot find pitot-bench go.mod; run remote provisioning from a source checkout")
 }
 
-func fetchFanout(ctx context.Context, dir, version, goos, goarch string) (string, string, error) {
-	asset, err := fanoutAsset(version, goos, goarch)
+func fetchPitot(ctx context.Context, dir, version, goos, goarch string) (string, string, error) {
+	asset, err := pitotAsset(version, goos, goarch)
 	if err != nil {
 		return "", "", err
 	}
-	base := "https://github.com/labstack/fanout/releases/download/" + version + "/"
+	base := "https://github.com/labstack/pitot/releases/download/" + version + "/"
 	sumsURL := base + "SHA256SUMS"
 	assetURL := base + asset
 	sums, err := downloadSmall(ctx, sumsURL, 1<<20)
@@ -418,16 +418,16 @@ func fetchFanout(ctx context.Context, dir, version, goos, goarch string) (string
 	if got != want {
 		return "", "", fmt.Errorf("checksum mismatch for %s: got %s want %s", asset, got, want)
 	}
-	binaryPath := filepath.Join(dir, "fanout")
-	if err := extractBinary(archivePath, binaryPath, "fanout"); err != nil {
+	binaryPath := filepath.Join(dir, "pitot")
+	if err := extractBinary(archivePath, binaryPath, "pitot"); err != nil {
 		return "", "", err
 	}
 	return binaryPath, assetURL + "#sha256=" + got, nil
 }
 
-// stageLocalFanout copies a local Linux ELF binary for the remote architecture
+// stageLocalPitot copies a local Linux ELF binary for the remote architecture
 // into the upload directory and identifies it by checksum as unreleased.
-func stageLocalFanout(source, dir, goarch string) (string, string, error) {
+func stageLocalPitot(source, dir, goarch string) (string, string, error) {
 	file, err := elf.Open(source)
 	if err != nil {
 		return "", "", fmt.Errorf("%s is not a Linux ELF binary: %w", source, err)
@@ -443,7 +443,7 @@ func stageLocalFanout(source, dir, goarch string) (string, string, error) {
 		return "", "", err
 	}
 	defer in.Close()
-	destination := filepath.Join(dir, "fanout")
+	destination := filepath.Join(dir, "pitot")
 	out, err := os.OpenFile(destination, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o755)
 	if err != nil {
 		return "", "", err
@@ -460,14 +460,14 @@ func stageLocalFanout(source, dir, goarch string) (string, string, error) {
 	return destination, UnreleasedArtifactPrefix + "#sha256=" + hex.EncodeToString(hash.Sum(nil)), nil
 }
 
-func fanoutAsset(version, goos, goarch string) (string, error) {
-	if !fanoutVersionPattern.MatchString(version) {
-		return "", fmt.Errorf("invalid Fanout release %q", version)
+func pitotAsset(version, goos, goarch string) (string, error) {
+	if !pitotVersionPattern.MatchString(version) {
+		return "", fmt.Errorf("invalid Pitot release %q", version)
 	}
 	if goos != "linux" || (goarch != "amd64" && goarch != "arm64") {
-		return "", fmt.Errorf("unsupported Fanout platform %s/%s", goos, goarch)
+		return "", fmt.Errorf("unsupported Pitot platform %s/%s", goos, goarch)
 	}
-	return "fanout_" + version + "_" + goos + "_" + goarch + ".tar.gz", nil
+	return "pitot_" + version + "_" + goos + "_" + goarch + ".tar.gz", nil
 }
 
 func downloadSmall(ctx context.Context, url string, limit int64) ([]byte, error) {
@@ -527,12 +527,12 @@ func extractBinary(archivePath, destination, name string) error {
 }
 
 func managedRemoteCommand(stage string, cfg Config, version, artifact string) string {
-	args := []string{stage + "/fanout-bench", "managed", "--fanout", stage + "/fanout", "--output", stage + "/results", "--fanout-version", cfg.FanoutVersion, "--fanout-artifact", artifact, "--signals", cfg.SignalSelection, "--preset", cfg.Preset, "--repeat", fmt.Sprint(cfg.Repeat), "--batch-size", fmt.Sprint(cfg.BatchSize), "--query-rate", fmt.Sprint(cfg.QueryRate), "--sample-interval", cfg.SampleInterval.String(), "--cooldown", cfg.Cooldown.String(), "--harness-version", version}
+	args := []string{stage + "/pitot-bench", "managed", "--pitot", stage + "/pitot", "--output", stage + "/results", "--pitot-version", cfg.PitotVersion, "--pitot-artifact", artifact, "--signals", cfg.SignalSelection, "--preset", cfg.Preset, "--repeat", fmt.Sprint(cfg.Repeat), "--batch-size", fmt.Sprint(cfg.BatchSize), "--query-rate", fmt.Sprint(cfg.QueryRate), "--sample-interval", cfg.SampleInterval.String(), "--cooldown", cfg.Cooldown.String(), "--harness-version", version}
 	args = append(args, "--telemetrygen-version", cfg.TelemetrygenVersion)
 	args = append(args, "--provisioned-host", redactedHost(cfg.Host), "--host-description", cfg.HostDescription)
 	args = append(args, "--provisioned-ssh-port", fmt.Sprint(cfg.SSHPort), "--provisioned-ssh-identity", cfg.SSHIdentity)
 	args = append(args, "--processes", fmt.Sprint(cfg.ProcessOverride), "--workers", fmt.Sprint(cfg.WorkerOverride), "--rate", fmt.Sprint(cfg.RateOverride), "--duration", cfg.DurationOverride.String())
-	binaries := []string{stage + "/fanout-bench", stage + "/fanout"}
+	binaries := []string{stage + "/pitot-bench", stage + "/pitot"}
 	prefix := ""
 	if cfg.GeneratorHost == "" {
 		binaries = append(binaries, stage+"/telemetrygen")
@@ -542,7 +542,7 @@ func managedRemoteCommand(stage string, cfg Config, version, artifact string) st
 		if strings.Contains(address, ":") {
 			address = "[" + address + "]"
 		}
-		args = append(args, "--listen", cfg.FanoutListen, "--generator-ssh", "root@"+address,
+		args = append(args, "--listen", cfg.PitotListen, "--generator-ssh", "root@"+address,
 			"--generator-ssh-port", fmt.Sprint(cfg.SSHPort),
 			"--generator-ssh-identity", stage+"/generator_key", "--generator-telemetrygen", stage+"-generator/telemetrygen",
 			"--generator-host-description", cfg.GeneratorHostDescription)

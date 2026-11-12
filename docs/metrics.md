@@ -1,19 +1,19 @@
 # Metric definitions
 
-Metrics are scraped from `/metrics` using `Authorization: Bearer …` with `FANOUT_METRICS_TOKEN` (local harness input: `FANOUT_BENCH_METRICS_TOKEN`). Managed runs generate a private token in memory.
+Metrics are scraped from `/metrics` using `Authorization: Bearer …` with `PITOT_METRICS_TOKEN` (local harness input: `PITOT_BENCH_METRICS_TOKEN`). Managed runs generate a private token in memory.
 
 ## Throughput
 
 | Field | Definition |
 |---|---|
 | offered items/s | configured processes × workers × per-worker rate; multiplied by three for mixed load |
-| accepted count | end minus start of Fanout's per-signal `fanout_ingest_rows_total` counter |
+| accepted count | end minus start of Pitot's per-signal `pitot_ingest_rows_total` counter |
 | accepted items/s | total accepted count ÷ the interval between the counter scrapes bracketing the phase |
 | acceptance ratio | accepted count ÷ (offered items/s × requested generator duration) |
 
 Wall time includes generator startup and final batch delivery. This makes throughput conservative and prevents final flush time from disappearing from the denominator.
 
-telemetrygen exports a parent and child span per generated trace, but its limiter consumes one token for each span. Its `--rate` is therefore already aggregate spans/s; Fanout Bench does not apply another trace-shape multiplier.
+telemetrygen exports a parent and child span per generated trace, but its limiter consumes one token for each span. Its `--rate` is therefore already aggregate spans/s; Pitot Bench does not apply another trace-shape multiplier.
 
 ## Server resources
 
@@ -24,13 +24,13 @@ telemetrygen exports a parent and child span per generated trace, but its limite
 | peak/end Go heap | sampled `go_memstats_heap_alloc_bytes` |
 | allocations | delta of `go_memstats_alloc_bytes_total` |
 | GC pause | delta of `go_gc_duration_seconds_sum` |
-| queue peak | maximum sampled `fanout_ingest_queue_depth` |
-| Parquet files/bytes | `fanout_parquet_files` and `fanout_parquet_size_bytes` |
+| queue peak | maximum sampled `pitot_ingest_queue_depth` |
+| Parquet files/bytes | `pitot_parquet_files` and `pitot_parquet_size_bytes` |
 | disk growth | recursive regular-file size delta when `--data-dir` is provided |
 
-CPU is the Fanout process only. On a same-host run it does not include telemetrygen CPU, but telemetrygen still competes with Fanout for machine resources. RSS and heap are sampled during the phase; an end-only measurement would miss transient peaks.
+CPU is the Pitot process only. On a same-host run it does not include telemetrygen CPU, but telemetrygen still competes with Pitot for machine resources. RSS and heap are sampled during the phase; an end-only measurement would miss transient peaks.
 
-The sampled series above, plus `fanout_rows_dropped_total`, `process_start_time_seconds`, `fanout_parquet_publish_waiters`, and `fanout_parquet_publish_timeouts_total`, come from Fanout v2026.10.1-alpha and its registered Go/process collectors.
+The sampled series above, plus `pitot_rows_dropped_total`, `process_start_time_seconds`, `pitot_parquet_publish_waiters`, and `pitot_parquet_publish_timeouts_total`, come from Pitot v2026.11.5-alpha and its registered Go/process collectors.
 
 ## Background work samples
 
@@ -38,15 +38,15 @@ Each `samples.jsonl` row also records the following `/metrics` values. The same 
 
 | Sample field | Source |
 |---|---|
-| `ingest_rows_total` | `fanout_ingest_rows_total`, keyed by `signal` (`spans`, `logs`, `metrics`) |
-| `rollup_seconds` | `fanout_rollup_component_duration_seconds_sum`, keyed by `rollup` (`service`, `edge`, `version`, `read_cache`) |
-| `write_gate_hold_seconds` | `fanout_write_gate_hold_seconds_sum`, keyed by `operation` |
-| `write_gate_wait_seconds` | `fanout_write_gate_wait_seconds_sum`, keyed by `operation` |
-| `compaction_seconds_total` | `fanout_telemetry_operation_duration_seconds_sum` for `operation="compaction"` |
-| `compactions_total` | `fanout_telemetry_operation_duration_seconds_count` for `operation="compaction"` |
-| `publish_wait_seconds_total` | `fanout_parquet_publish_wait_seconds_sum` |
-| `ingest_backpressure_seconds_total` | `fanout_ingest_backpressure_seconds_total` |
-| `compaction_backlog_batches` | `fanout_compaction_backlog_batches` |
+| `ingest_rows_total` | `pitot_ingest_rows_total`, keyed by `signal` (`spans`, `logs`, `metrics`) |
+| `rollup_seconds` | `pitot_rollup_component_duration_seconds_sum`, keyed by `rollup` (`service`, `edge`, `version`, `read_cache`) |
+| `write_gate_hold_seconds` | `pitot_write_gate_hold_seconds_sum`, keyed by `operation` |
+| `write_gate_wait_seconds` | `pitot_write_gate_wait_seconds_sum`, keyed by `operation` |
+| `compaction_seconds_total` | `pitot_telemetry_operation_duration_seconds_sum` for `operation="compaction"` |
+| `compactions_total` | `pitot_telemetry_operation_duration_seconds_count` for `operation="compaction"` |
+| `publish_wait_seconds_total` | `pitot_parquet_publish_wait_seconds_sum` |
+| `ingest_backpressure_seconds_total` | `pitot_ingest_backpressure_seconds_total` |
+| `compaction_backlog_batches` | `pitot_compaction_backlog_batches` |
 
 Durations and counts are cumulative values at scrape time, not phase deltas. Subtract adjacent samples to attribute work during an interval, accounting for process restarts. For per-second accepted-row rates, divide each signal's `ingest_rows_total` delta by the difference in `at_seconds` between consecutive samples. `compaction_backlog_batches` is a current gauge rather than a cumulative counter. Series with additional labels are summed, retaining the indicated map key for ingest signals, rollups, and write gates. Absent maps and zero scalar values are omitted from JSON, and missing metrics do not fail a run. These samples provide attribution evidence without changing headline tables or quality gates.
 
@@ -79,9 +79,9 @@ One scheduled read is one operation. Its latency runs until every request comple
 A report passes its evidence-quality gates when:
 
 1. every telemetrygen process exits successfully;
-2. Fanout reports no dropped rows;
-3. the Fanout process start time does not change;
-4. Fanout's accepted-row counter advances in every phase.
+2. Pitot reports no dropped rows;
+3. the Pitot process start time does not change;
+4. Pitot's accepted-row counter advances in every phase.
 
 When read load is enabled, the sustained mixed phase must also complete at least 95% of the requested operation rate with zero operation failures and zero scheduler shedding. The report records operations canceled exactly at the phase boundary separately; they are not hidden as successful work.
 
@@ -92,7 +92,7 @@ The read scheduler is open-loop and bounded. `query_attempts` counts scheduled o
 Each trial's `dashboard_panels` records per-panel counts for `ok`, `empty`,
 `busy`, `error`, `timeout`, and `missing`, including results from failed
 refreshes. Both JSON batches and NDJSON streams are supported. An error with
-`reason: busy` counts as busy; Fanout's public execution-deadline message
+`reason: busy` counts as busy; Pitot's public execution-deadline message
 counts as timeout. An explicit HTTP busy rejection or HTTP 504 applies that
 outcome to every requested non-text panel. Other unavailable results count as
 missing. Complete results in an interrupted stream are retained, and absent
@@ -121,16 +121,16 @@ whose panels all succeeded.
 ### Server panel samples
 
 `samples.jsonl` and `trials[].samples` include `panel_metrics` when available,
-keyed by exact metric name, then `panel`, then `status`. Fanout's current
-names in `internal/metrics/panels.go` are `fanout_panel_*`, rather than
-`fanout_query_panel_*`:
+keyed by exact metric name, then `panel`, then `status`. Pitot's current
+names in `internal/metrics/panels.go` are `pitot_panel_*`, rather than
+`pitot_query_panel_*`:
 
 | Metric | Meaning |
 |---|---|
-| `fanout_panel_query_duration_seconds_count` | Executed outcomes (`ok`, `empty`, `error`, `other`) |
-| `fanout_panel_query_duration_seconds_sum` | Execution seconds by panel and outcome, excluding cache hits and admission wait |
-| `fanout_panel_admission_duration_seconds_count` | Admission counts (`admitted`, `rejected`, `canceled`, `timeout`, `other`) |
-| `fanout_panel_admission_duration_seconds_sum` | Admission wait seconds by panel and outcome |
+| `pitot_panel_query_duration_seconds_count` | Executed outcomes (`ok`, `empty`, `error`, `other`) |
+| `pitot_panel_query_duration_seconds_sum` | Execution seconds by panel and outcome, excluding cache hits and admission wait |
+| `pitot_panel_admission_duration_seconds_count` | Admission counts (`admitted`, `rejected`, `canceled`, `timeout`, `other`) |
+| `pitot_panel_admission_duration_seconds_sum` | Admission wait seconds by panel and outcome |
 
 These are cumulative histogram counts and sums. Additional labels are summed;
 panel and status labels are retained. Subtract adjacent samples to measure
@@ -145,19 +145,19 @@ Saturation is not an evidence failure. A valid phase can fail to sustain its off
 
 - Synthetic telemetrygen payloads are small and repetitive, so storage compression is not production-representative.
 - One span, log record, and metric data point do not have equal byte or compute cost. The mixed headline is an item count and the report preserves its composition.
-- A same-host observed peak is a whole-machine result, not proof of Fanout's isolated backend ceiling.
+- A same-host observed peak is a whole-machine result, not proof of Pitot's isolated backend ceiling.
 - A short peak is not a sustained capacity claim. Publish the long mixed proof alongside signal-specific sweeps.
 - A stress peak that misses its read target is not serviceable mixed capacity. Use the sustained topology and its read-load gate for that claim.
-- No benchmark number transfers automatically across CPU models, storage devices, filesystems, retention settings, or Fanout versions.
+- No benchmark number transfers automatically across CPU models, storage devices, filesystems, retention settings, or Pitot versions.
 
 ### Saturation admission samples
 
-`ingest_throttled_total` records `fanout_ingest_throttled_total` by reason
+`ingest_throttled_total` records `pitot_ingest_throttled_total` by reason
 (`debt`, `reads`, `budget`). `ingest_admission_rows_per_second` records the
 current cap; zero means uncapped. `compaction_retired_batches_total` records
-`fanout_compaction_retired_batches_total`; use deltas to measure retirement
+`pitot_compaction_retired_batches_total`; use deltas to measure retirement
 throughput. `compaction_pass_seconds_total` records the histogram sum from
-`fanout_compaction_pass_seconds_sum`.
+`pitot_compaction_pass_seconds_sum`.
 
 With saturation admission enabled, `ingest_backpressure_seconds_total` measures
 seconds with an active cap rather than seconds blocked in the writer. Values

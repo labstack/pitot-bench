@@ -25,10 +25,10 @@ func TestResourceSampleIngestRowsTotal(t *testing.T) {
 	}{
 		{
 			name: "present",
-			fixture: `fanout_ingest_rows_total{signal="spans",transport="grpc"} 123
-fanout_ingest_rows_total{signal="spans",transport="http"} 7
-fanout_ingest_rows_total{signal="logs"} 45
-fanout_ingest_rows_total{signal="metrics"} 0
+			fixture: `pitot_ingest_rows_total{signal="spans",transport="grpc"} 123
+pitot_ingest_rows_total{signal="spans",transport="http"} 7
+pitot_ingest_rows_total{signal="logs"} 45
+pitot_ingest_rows_total{signal="metrics"} 0
 process_cpu_seconds_total 12
 `,
 			want: map[string]float64{"spans": 130, "logs": 45, "metrics": 0},
@@ -76,39 +76,39 @@ func TestResourceSampleBackgroundMetrics(t *testing.T) {
 	const fixture = `process_cpu_seconds_total 12
 process_resident_memory_bytes 1024
 go_memstats_heap_alloc_bytes 512
-fanout_ingest_queue_depth 3
-fanout_parquet_files 4
-fanout_parquet_size_bytes 2048
-fanout_parquet_publish_waiters 2
-fanout_parquet_publish_timeouts_total 1
-fanout_rollup_component_duration_seconds_sum{rollup="service",signal="spans"} 1.25
-fanout_rollup_component_duration_seconds_sum{rollup="service",signal="logs"} 0.75
-fanout_rollup_component_duration_seconds_sum{rollup="edge"} 2.5
-fanout_rollup_component_duration_seconds_sum{rollup="version"} 3.5
-fanout_rollup_component_duration_seconds_sum{rollup="read_cache"} 4.5
-fanout_rollup_component_duration_seconds_count{rollup="service"} 100
-fanout_write_gate_hold_seconds_sum{operation="ingest",signal="spans"} 5
-fanout_write_gate_hold_seconds_sum{operation="ingest",signal="logs"} 0.5
-fanout_write_gate_hold_seconds_sum{operation="compaction"} 6.5
-fanout_write_gate_wait_seconds_sum{operation="ingest",signal="spans"} 7
-fanout_write_gate_wait_seconds_sum{operation="ingest",signal="logs"} 0.5
-fanout_write_gate_wait_seconds_sum{operation="compaction"} 8.5
-fanout_write_gate_wait_seconds_count{operation="ingest"} 100
-fanout_telemetry_operation_duration_seconds_sum{operation="compaction",signal="spans"} 9
-fanout_telemetry_operation_duration_seconds_sum{operation="compaction",signal="logs"} 0.5
-fanout_telemetry_operation_duration_seconds_sum{operation="ingest"} 100
-fanout_telemetry_operation_duration_seconds_count{operation="compaction",signal="spans"} 10
-fanout_telemetry_operation_duration_seconds_count{operation="compaction",signal="logs"} 2
-fanout_telemetry_operation_duration_seconds_count{operation="ingest"} 100
-fanout_parquet_publish_wait_seconds_sum{signal="spans"} 11
-fanout_parquet_publish_wait_seconds_sum{signal="logs"} 0.5
-fanout_ingest_backpressure_seconds_total 12.5
-fanout_ingest_throttled_total{reason="debt"} 14
-fanout_ingest_throttled_total{reason="reads"} 15
-fanout_compaction_retired_batches_total 128
-fanout_ingest_admission_rows_per_second 20000
-fanout_compaction_pass_seconds_sum 16
-fanout_compaction_backlog_batches 13
+pitot_ingest_queue_depth 3
+pitot_parquet_files 4
+pitot_parquet_size_bytes 2048
+pitot_parquet_publish_waiters 2
+pitot_parquet_publish_timeouts_total 1
+pitot_rollup_component_duration_seconds_sum{rollup="service",signal="spans"} 1.25
+pitot_rollup_component_duration_seconds_sum{rollup="service",signal="logs"} 0.75
+pitot_rollup_component_duration_seconds_sum{rollup="edge"} 2.5
+pitot_rollup_component_duration_seconds_sum{rollup="version"} 3.5
+pitot_rollup_component_duration_seconds_sum{rollup="read_cache"} 4.5
+pitot_rollup_component_duration_seconds_count{rollup="service"} 100
+pitot_write_gate_hold_seconds_sum{operation="ingest",signal="spans"} 5
+pitot_write_gate_hold_seconds_sum{operation="ingest",signal="logs"} 0.5
+pitot_write_gate_hold_seconds_sum{operation="compaction"} 6.5
+pitot_write_gate_wait_seconds_sum{operation="ingest",signal="spans"} 7
+pitot_write_gate_wait_seconds_sum{operation="ingest",signal="logs"} 0.5
+pitot_write_gate_wait_seconds_sum{operation="compaction"} 8.5
+pitot_write_gate_wait_seconds_count{operation="ingest"} 100
+pitot_telemetry_operation_duration_seconds_sum{operation="compaction",signal="spans"} 9
+pitot_telemetry_operation_duration_seconds_sum{operation="compaction",signal="logs"} 0.5
+pitot_telemetry_operation_duration_seconds_sum{operation="ingest"} 100
+pitot_telemetry_operation_duration_seconds_count{operation="compaction",signal="spans"} 10
+pitot_telemetry_operation_duration_seconds_count{operation="compaction",signal="logs"} 2
+pitot_telemetry_operation_duration_seconds_count{operation="ingest"} 100
+pitot_parquet_publish_wait_seconds_sum{signal="spans"} 11
+pitot_parquet_publish_wait_seconds_sum{signal="logs"} 0.5
+pitot_ingest_backpressure_seconds_total 12.5
+pitot_ingest_throttled_total{reason="debt"} 14
+pitot_ingest_throttled_total{reason="reads"} 15
+pitot_compaction_retired_batches_total 128
+pitot_ingest_admission_rows_per_second 20000
+pitot_compaction_pass_seconds_sum 16
+pitot_compaction_backlog_batches 13
 `
 	snap, err := parsePrometheus(strings.NewReader(fixture))
 	if err != nil {
@@ -163,11 +163,11 @@ func TestResourceSampleWithoutBackgroundMetrics(t *testing.T) {
 	const fixture = `process_cpu_seconds_total 12
 process_resident_memory_bytes 1024
 go_memstats_heap_alloc_bytes 512
-fanout_ingest_queue_depth 3
-fanout_parquet_files 4
-fanout_parquet_size_bytes 2048
-fanout_parquet_publish_waiters 2
-fanout_parquet_publish_timeouts_total 1
+pitot_ingest_queue_depth 3
+pitot_parquet_files 4
+pitot_parquet_size_bytes 2048
+pitot_parquet_publish_waiters 2
+pitot_parquet_publish_timeouts_total 1
 `
 	snap, err := parsePrometheus(strings.NewReader(fixture))
 	if err != nil {
@@ -212,7 +212,7 @@ func TestRunPhaseStopsQueriesBeforeFinalGeneratorCPURead(t *testing.T) {
 						return nil, ctx.Err()
 					}
 				}
-				body = "fanout_rows_accepted_total{signal=\"logs\"} 1\n"
+				body = "pitot_rows_accepted_total{signal=\"logs\"} 1\n"
 			} else {
 				dispatched.Add(1)
 				select {
@@ -292,7 +292,7 @@ func TestGeneratorCommandWrapsSSHAndQuotesEveryArgument(t *testing.T) {
 }
 
 func TestGeneratorCommandClientDeadline(t *testing.T) {
-	if os.Getenv("FANOUT_BENCH_TEST_SILENT_CHILD") == "1" {
+	if os.Getenv("PITOT_BENCH_TEST_SILENT_CHILD") == "1" {
 		time.Sleep(time.Minute)
 		return
 	}
@@ -318,7 +318,7 @@ func TestGeneratorCommandClientDeadline(t *testing.T) {
 			// Exercise the client's context with a silent local child; never run SSH.
 			cmd.Path = executable
 			cmd.Args = []string{executable, "-test.run=^TestGeneratorCommandClientDeadline$"}
-			cmd.Env = append(os.Environ(), "FANOUT_BENCH_TEST_SILENT_CHILD=1")
+			cmd.Env = append(os.Environ(), "PITOT_BENCH_TEST_SILENT_CHILD=1")
 			started := time.Now()
 			if err := cmd.Run(); err == nil {
 				t.Fatal("silent child escaped the client deadline")

@@ -32,11 +32,11 @@ type ManagedConfig struct {
 	GeneratorSSHPort         int
 	GeneratorSSHIdentity     string
 	GeneratorTelemetrygen    string
-	FanoutPath               string
+	PitotPath                string
 	TelemetrygenPath         string
 	OutputDir                string
-	FanoutVersion            string
-	FanoutArtifact           string
+	PitotVersion             string
+	PitotArtifact            string
 	Preset                   string
 	SignalSelection          string
 	Repeat                   int
@@ -67,11 +67,11 @@ func RunManaged(ctx context.Context, managed ManagedConfig, out io.Writer) error
 		}
 		managed.TelemetrygenPath = managed.GeneratorTelemetrygen
 	}
-	if managed.FanoutPath == "" || managed.TelemetrygenPath == "" || managed.OutputDir == "" {
+	if managed.PitotPath == "" || managed.TelemetrygenPath == "" || managed.OutputDir == "" {
 		return errors.New("managed paths are required")
 	}
 	// Clean first: without it "./results" and "./results/" resolve to different
-	// stage directories, so a trailing slash would silently move the Fanout data
+	// stage directories, so a trailing slash would silently move the Pitot data
 	// directory and its log somewhere else.
 	stage := filepath.Dir(filepath.Clean(managed.OutputDir))
 	dataDir := filepath.Join(stage, "data")
@@ -93,20 +93,20 @@ func RunManaged(ctx context.Context, managed ManagedConfig, out io.Writer) error
 	grpcAddr := httpAddr
 	metricsURL := "http://" + httpAddr + "/metrics"
 	baseURL := "http://" + httpAddr
-	env := fanoutEnvironment(os.Environ(), dataDir, httpAddr, authSecret, metricsToken)
+	env := pitotEnvironment(os.Environ(), dataDir, httpAddr, authSecret, metricsToken)
 
-	actualVersion := strings.TrimSpace(commandOutput(managed.FanoutPath, "version"))
+	actualVersion := strings.TrimSpace(commandOutput(managed.PitotPath, "version"))
 	if actualVersion == "" {
-		actualVersion = managed.FanoutVersion
+		actualVersion = managed.PitotVersion
 	}
-	fmt.Fprintf(out, "Provisioned Fanout %s\n  data       %s\n  OTLP/gRPC  %s\n  metrics    %s\n", actualVersion, dataDir, grpcAddr, metricsURL)
+	fmt.Fprintf(out, "Provisioned Pitot %s\n  data       %s\n  OTLP/gRPC  %s\n  metrics    %s\n", actualVersion, dataDir, grpcAddr, metricsURL)
 
-	logPath := filepath.Join(stage, "fanout.log")
+	logPath := filepath.Join(stage, "pitot.log")
 	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
 	if err != nil {
 		return err
 	}
-	cmd := exec.Command(managed.FanoutPath)
+	cmd := exec.Command(managed.PitotPath)
 	cmd.Env = env
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -151,11 +151,11 @@ func RunManaged(ctx context.Context, managed ManagedConfig, out io.Writer) error
 	go scan(stdout)
 	go scan(stderr)
 	// Drain both pipes before Wait: Wait closes them on process exit, so waiting
-	// first truncates the log exactly when Fanout died and the log is the only
+	// first truncates the log exactly when Pitot died and the log is the only
 	// evidence of why.
 	go func() { scanWG.Wait(); processErr = cmd.Wait(); logFile.Close(); close(processDone) }()
 	var stopOnce sync.Once
-	stopFanout := func() {
+	stopPitot := func() {
 		stopOnce.Do(func() {
 			if cmd.Process == nil {
 				return
@@ -169,15 +169,15 @@ func RunManaged(ctx context.Context, managed ManagedConfig, out io.Writer) error
 			}
 		})
 	}
-	defer stopFanout()
+	defer stopPitot()
 
 	var setupToken string
 	select {
 	case setupToken = <-setupTokens:
 	case <-processDone:
-		return fmt.Errorf("Fanout exited before setup: %w", processErr)
+		return fmt.Errorf("Pitot exited before setup: %w", processErr)
 	case <-time.After(30 * time.Second):
-		return errors.New("timed out waiting for Fanout setup token")
+		return errors.New("timed out waiting for Pitot setup token")
 	case <-ctx.Done():
 		return ctx.Err()
 	}
@@ -187,11 +187,11 @@ func RunManaged(ctx context.Context, managed ManagedConfig, out io.Writer) error
 	}
 
 	cfg := managedRunnerConfig(managed, httpAddr, dataDir)
-	cfg.FanoutVersion = actualVersion
+	cfg.PitotVersion = actualVersion
 	cfg.Token, cfg.MetricsToken, cfg.QueryCookie = ingestToken, metricsToken, queryCookie
 	runner := Runner{Config: cfg, Version: managed.HarnessVersion, Out: out, DeferSummary: true}
 	report, runErr := runner.Run(ctx)
-	stopFanout()
+	stopPitot()
 	if runErr != nil {
 		if report != nil {
 			if mkErr := os.MkdirAll(managed.OutputDir, 0o755); mkErr == nil {
@@ -199,11 +199,11 @@ func RunManaged(ctx context.Context, managed ManagedConfig, out io.Writer) error
 					fmt.Fprintf(out, "\nPartial evidence written to %s\n", managed.OutputDir)
 				}
 			}
-			_ = copyEvidenceFile(logPath, filepath.Join(managed.OutputDir, "fanout.log"))
+			_ = copyEvidenceFile(logPath, filepath.Join(managed.OutputDir, "pitot.log"))
 		}
 		return runErr
 	}
-	verify := exec.CommandContext(ctx, managed.FanoutPath, "repair", "verify")
+	verify := exec.CommandContext(ctx, managed.PitotPath, "repair", "verify")
 	verify.Env = env
 	verifyOutput, verifyErr := verify.CombinedOutput()
 	verifyDetail := "authoritative Parquet storage verified"
@@ -225,7 +225,7 @@ func RunManaged(ctx context.Context, managed ManagedConfig, out io.Writer) error
 	if repairEvidence == "" {
 		repairEvidence = verifyDetail
 	}
-	if err := os.WriteFile(filepath.Join(managed.OutputDir, "fanout-repair.txt"), []byte(repairEvidence+"\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(managed.OutputDir, "pitot-repair.txt"), []byte(repairEvidence+"\n"), 0o600); err != nil {
 		return err
 	}
 	// Reports first: a failure copying the log must not cost a finished run its
@@ -233,10 +233,10 @@ func RunManaged(ctx context.Context, managed ManagedConfig, out io.Writer) error
 	if err := WriteArtifacts(managed.OutputDir, *report); err != nil {
 		return err
 	}
-	if err := copyEvidenceFile(logPath, filepath.Join(managed.OutputDir, "fanout.log")); err != nil {
+	if err := copyEvidenceFile(logPath, filepath.Join(managed.OutputDir, "pitot.log")); err != nil {
 		return err
 	}
-	fmt.Fprintf(out, "\nRemote evidence ready\n  %s\n  %s\n  %s\n  %s\n  %s\n", filepath.Join(managed.OutputDir, "report.json"), filepath.Join(managed.OutputDir, "report.md"), filepath.Join(managed.OutputDir, "samples.jsonl"), filepath.Join(managed.OutputDir, "fanout-repair.txt"), filepath.Join(managed.OutputDir, "fanout.log"))
+	fmt.Fprintf(out, "\nRemote evidence ready\n  %s\n  %s\n  %s\n  %s\n  %s\n", filepath.Join(managed.OutputDir, "report.json"), filepath.Join(managed.OutputDir, "report.md"), filepath.Join(managed.OutputDir, "samples.jsonl"), filepath.Join(managed.OutputDir, "pitot-repair.txt"), filepath.Join(managed.OutputDir, "pitot.log"))
 	if !report.Summary.Passed {
 		return errors.New("quality gates failed")
 	}
@@ -250,7 +250,7 @@ func managedRunnerConfig(managed ManagedConfig, httpAddr, dataDir string) Config
 		SignalSelection: managed.SignalSelection, Preset: managed.Preset, Repeat: managed.Repeat, BatchSize: managed.BatchSize,
 		Endpoint: httpAddr, MetricsURL: "http://" + httpAddr + "/metrics", QueryURL: "http://" + httpAddr,
 		Insecure: true, Telemetrygen: managed.TelemetrygenPath, OutputDir: managed.OutputDir,
-		FanoutVersion: managed.FanoutVersion, FanoutArtifact: managed.FanoutArtifact, DataDir: dataDir,
+		PitotVersion: managed.PitotVersion, PitotArtifact: managed.PitotArtifact, DataDir: dataDir,
 		SampleInterval: managed.SampleInterval, GeneratorTimeout: 30 * time.Second, Cooldown: managed.Cooldown,
 		QueryRate: managed.QueryRate, SameHost: managed.GeneratorSSH == "", TelemetrygenVersion: managed.TelemetrygenVersion,
 		ProcessOverride: managed.ProcessOverride, WorkerOverride: managed.WorkerOverride,
@@ -270,7 +270,7 @@ func managedRunnerConfig(managed ManagedConfig, httpAddr, dataDir string) Config
 func completeSetup(ctx context.Context, baseURL, setupToken string) (string, string, error) {
 	jar, _ := cookiejar.New(nil)
 	client := &http.Client{Timeout: 10 * time.Second, Jar: jar}
-	payload, _ := json.Marshal(map[string]string{"email": "benchmark@localhost", "display_name": "Fanout Benchmark", "setup_token": setupToken})
+	payload, _ := json.Marshal(map[string]string{"email": "benchmark@localhost", "display_name": "Pitot Benchmark", "setup_token": setupToken})
 	deadline := time.Now().Add(20 * time.Second)
 	for {
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/api/auth/setup", bytes.NewReader(payload))
@@ -278,7 +278,7 @@ func completeSetup(ctx context.Context, baseURL, setupToken string) (string, str
 			return "", "", err
 		}
 		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Fanout-Request", "1")
+		req.Header.Set("Pitot-Request", "1")
 		resp, err := client.Do(req)
 		if err == nil {
 			body, readErr := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
@@ -294,7 +294,7 @@ func completeSetup(ctx context.Context, baseURL, setupToken string) (string, str
 					return "", "", err
 				}
 				if decoded.IngestToken == "" {
-					return "", "", errors.New("Fanout setup response missing ingest_token")
+					return "", "", errors.New("Pitot setup response missing ingest_token")
 				}
 				parsed, _ := url.Parse(baseURL)
 				cookies := jar.Cookies(parsed)
@@ -303,19 +303,19 @@ func completeSetup(ctx context.Context, baseURL, setupToken string) (string, str
 					pairs = append(pairs, cookie.Name+"="+cookie.Value)
 				}
 				if len(pairs) == 0 {
-					return "", "", errors.New("Fanout setup returned no session cookie")
+					return "", "", errors.New("Pitot setup returned no session cookie")
 				}
 				return decoded.IngestToken, strings.Join(pairs, "; "), nil
 			}
 			if resp.StatusCode >= 400 && resp.StatusCode < 500 {
-				return "", "", fmt.Errorf("Fanout setup status %d", resp.StatusCode)
+				return "", "", fmt.Errorf("Pitot setup status %d", resp.StatusCode)
 			}
 		}
 		if time.Now().After(deadline) {
 			if err != nil {
-				return "", "", fmt.Errorf("Fanout setup: %w", err)
+				return "", "", fmt.Errorf("Pitot setup: %w", err)
 			}
-			return "", "", errors.New("Fanout setup timed out")
+			return "", "", errors.New("Pitot setup timed out")
 		}
 		select {
 		case <-ctx.Done():
@@ -371,23 +371,24 @@ func copyEvidenceFile(source, destination string) error {
 	return closeErr
 }
 
-// Fanout rejects unknown FANOUT_ names. Isolate the managed product from the
-// caller's Fanout and benchmark settings, including any AI provider selection.
-// Reuse this exact environment for offline repair verification.
-func fanoutEnvironment(parent []string, dataDir, addr, authSecret, metricsToken string) []string {
+// Pitot rejects unknown PITOT_ names. Isolate the managed product from the
+// caller's Pitot and benchmark settings, including any AI provider selection.
+// Retired product settings would also refuse startup. Reuse this exact
+// environment for offline repair verification.
+func pitotEnvironment(parent []string, dataDir, addr, authSecret, metricsToken string) []string {
 	env := make([]string, 0, len(parent)+7)
 	for _, entry := range parent {
-		if !strings.HasPrefix(entry, "FANOUT_") {
+		if !strings.HasPrefix(entry, "PITOT_") && !strings.HasPrefix(entry, "FANOUT_") {
 			env = append(env, entry)
 		}
 	}
 	return append(env,
-		"FANOUT_ADDR="+addr,
-		"FANOUT_DATA_DIR="+dataDir,
-		"FANOUT_AUTH_CODE_SECRET="+authSecret,
-		"FANOUT_METRICS_TOKEN="+metricsToken,
-		"FANOUT_METRICS_PUBLIC=false",
-		"FANOUT_MCP_ENABLED=false",
-		"FANOUT_ALERTS_ENABLED=false",
+		"PITOT_ADDR="+addr,
+		"PITOT_DATA_DIR="+dataDir,
+		"PITOT_AUTH_CODE_SECRET="+authSecret,
+		"PITOT_METRICS_TOKEN="+metricsToken,
+		"PITOT_METRICS_PUBLIC=false",
+		"PITOT_MCP_ENABLED=false",
+		"PITOT_ALERTS_ENABLED=false",
 	)
 }
