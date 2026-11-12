@@ -203,7 +203,7 @@ func TestPanelReadFailureRetainsOutcomesButFailsOperation(t *testing.T) {
 	})}
 	q := newQueryRun()
 	q.targets = []queryTarget{{name: "dashboard-refresh", panels: []string{"a"}, annotations: true, timePanels: map[string]bool{"a": true}}}
-	q.request(context.Background(), client, "http://fanout.test", "session=test", 0)
+	q.request(context.Background(), client, "http://pitot.test", "session=test", 0)
 	p := q.panelSummary()[0]
 	if q.failures != 1 || p.Statuses["ok"] != 1 || p.ElapsedMS.P95Ms != 42 || p.FailedRefreshes != 0 {
 		t.Fatalf("read error evidence lost: failures=%d panel=%+v", q.failures, p)
@@ -224,16 +224,16 @@ func TestPanelDiscoveryBounds(t *testing.T) {
 }
 
 func TestPanelReportAndServerMetricArtifacts(t *testing.T) {
-	metrics := `fanout_panel_query_duration_seconds_count{panel="latency",status="error",instance="a"} 2
-fanout_panel_query_duration_seconds_count{panel="latency",status="error",instance="b"} 3
-fanout_panel_query_duration_seconds_sum{panel="latency",status="error"} 50
-fanout_panel_admission_duration_seconds_sum{panel="latency",status="admitted"} 1.5
-fanout_panel_admission_duration_seconds_count{panel="latency",status="admitted"} 7
-fanout_panel_admission_duration_seconds_count{panel="hosts",status="rejected"} 4
-fanout_panel_admission_duration_seconds_count{panel="hosts",status="canceled"} 1
-fanout_panel_admission_duration_seconds_count{panel="hosts",status="timeout"} 2
-fanout_panel_admission_duration_seconds_count{panel="hosts",status="admitted"} 0
-fanout_panel_query_duration_seconds_bucket{panel="latency",status="error",le="10"} 5
+	metrics := `pitot_panel_query_duration_seconds_count{panel="latency",status="error",instance="a"} 2
+pitot_panel_query_duration_seconds_count{panel="latency",status="error",instance="b"} 3
+pitot_panel_query_duration_seconds_sum{panel="latency",status="error"} 50
+pitot_panel_admission_duration_seconds_sum{panel="latency",status="admitted"} 1.5
+pitot_panel_admission_duration_seconds_count{panel="latency",status="admitted"} 7
+pitot_panel_admission_duration_seconds_count{panel="hosts",status="rejected"} 4
+pitot_panel_admission_duration_seconds_count{panel="hosts",status="canceled"} 1
+pitot_panel_admission_duration_seconds_count{panel="hosts",status="timeout"} 2
+pitot_panel_admission_duration_seconds_count{panel="hosts",status="admitted"} 0
+pitot_panel_query_duration_seconds_bucket{panel="latency",status="error",le="10"} 5
 `
 	snap, err := parsePrometheus(strings.NewReader(metrics))
 	if err != nil {
@@ -241,10 +241,10 @@ fanout_panel_query_duration_seconds_bucket{panel="latency",status="error",le="10
 	}
 	sample := resourceSample(snap, 1)
 	want := PanelMetrics{
-		"fanout_panel_query_duration_seconds_count":     {"latency": {"error": 5}},
-		"fanout_panel_query_duration_seconds_sum":       {"latency": {"error": 50}},
-		"fanout_panel_admission_duration_seconds_sum":   {"latency": {"admitted": 1.5}},
-		"fanout_panel_admission_duration_seconds_count": {"latency": {"admitted": 7}, "hosts": {"rejected": 4, "canceled": 1, "timeout": 2, "admitted": 0}},
+		"pitot_panel_query_duration_seconds_count":     {"latency": {"error": 5}},
+		"pitot_panel_query_duration_seconds_sum":       {"latency": {"error": 50}},
+		"pitot_panel_admission_duration_seconds_sum":   {"latency": {"admitted": 1.5}},
+		"pitot_panel_admission_duration_seconds_count": {"latency": {"admitted": 7}, "hosts": {"rejected": 4, "canceled": 1, "timeout": 2, "admitted": 0}},
 	}
 	if !reflect.DeepEqual(sample.PanelMetrics, want) {
 		t.Fatalf("samples=%+v", sample.PanelMetrics)

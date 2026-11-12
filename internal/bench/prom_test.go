@@ -6,11 +6,11 @@ import (
 )
 
 func TestParsePrometheusAndCountAcceptedSignals(t *testing.T) {
-	input := `# HELP fanout_ingest_rows_total rows
-fanout_ingest_rows_total{signal="spans"} 123
-fanout_ingest_rows_total{signal="logs"} 45
-fanout_ingest_rows_total{signal="metrics"} 67
-fanout_other{operation="publish,\"atomic\"",result="ok"} 2
+	input := `# HELP pitot_ingest_rows_total rows
+pitot_ingest_rows_total{signal="spans"} 123
+pitot_ingest_rows_total{signal="logs"} 45
+pitot_ingest_rows_total{signal="metrics"} 67
+pitot_other{operation="publish,\"atomic\"",result="ok"} 2
 `
 	snap, err := parsePrometheus(strings.NewReader(input))
 	if err != nil {
@@ -20,7 +20,7 @@ fanout_other{operation="publish,\"atomic\"",result="ok"} 2
 	if got.Spans != 123 || got.LogRecords != 45 || got.MetricPoints != 67 {
 		t.Fatalf("counts=%+v", got)
 	}
-	if value := snap.total("fanout_other", map[string]string{"operation": "publish,\"atomic\""}); value != 2 {
+	if value := snap.total("pitot_other", map[string]string{"operation": "publish,\"atomic\""}); value != 2 {
 		t.Fatalf("escaped label total=%v", value)
 	}
 }
@@ -34,11 +34,11 @@ func TestParsePrometheusRejectsMalformedEvidence(t *testing.T) {
 // Prometheus exposition permits a trailing comma in a label set. Rejecting it
 // would abort a phase at its very first scrape.
 func TestParsePrometheusAcceptsTrailingLabelComma(t *testing.T) {
-	snap, err := parsePrometheus(strings.NewReader("fanout_ingest_rows_total{signal=\"spans\",} 5\n"))
+	snap, err := parsePrometheus(strings.NewReader("pitot_ingest_rows_total{signal=\"spans\",} 5\n"))
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	if got := snap.total("fanout_ingest_rows_total", map[string]string{"signal": "spans"}); got != 5 {
+	if got := snap.total("pitot_ingest_rows_total", map[string]string{"signal": "spans"}); got != 5 {
 		t.Fatalf("total=%v; want 5", got)
 	}
 }

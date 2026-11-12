@@ -188,7 +188,7 @@ func queryHTTP(ctx context.Context, client *http.Client, base, cookie, method, p
 		return nil, false
 	}
 	req.Header.Set("Cookie", cookie)
-	req.Header.Set("Fanout-Request", "1")
+	req.Header.Set("Pitot-Request", "1")
 	if method == http.MethodPost {
 		req.Header.Set("Content-Type", "application/json")
 	}

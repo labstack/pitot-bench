@@ -16,7 +16,7 @@ import (
 
 func systemSpec(t *testing.T) []byte {
 	t.Helper()
-	// DefaultSpec from Fanout 870c90db, including defaults_sql.go and spec.go.
+	// DefaultSpec from Pitot 870c90db, including defaults_sql.go and spec.go.
 	spec, err := os.ReadFile("testdata/system-overview-v2026.10.1-alpha.json")
 	if err != nil {
 		t.Fatal(err)
@@ -119,7 +119,7 @@ func TestWorkloadDiscoversAuthenticatedBuiltInDashboard(t *testing.T) {
 	requests := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requests++
-		if r.Header.Get("Cookie") != "fanout_session=test" || r.Method != http.MethodGet {
+		if r.Header.Get("Cookie") != "pitot_session=test" || r.Method != http.MethodGet {
 			t.Error("discovery missing authentication")
 		}
 		switch r.URL.Path {
@@ -133,7 +133,7 @@ func TestWorkloadDiscoversAuthenticatedBuiltInDashboard(t *testing.T) {
 		}
 	}))
 	defer server.Close()
-	targets, _, err := loadQueryTargets(context.Background(), server.Client(), server.URL, "fanout_session=test")
+	targets, _, err := loadQueryTargets(context.Background(), server.Client(), server.URL, "pitot_session=test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -147,7 +147,7 @@ func TestRefreshIncludesAnnotationsAndMeasuresWholeOperation(t *testing.T) {
 	paths := []string{}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		paths = append(paths, r.URL.Path)
-		if r.Method != http.MethodPost || r.Header.Get("Cookie") != "fanout_session=test" || r.Header.Get("Fanout-Request") != "1" || r.Header.Get("Content-Type") != "application/json" {
+		if r.Method != http.MethodPost || r.Header.Get("Cookie") != "pitot_session=test" || r.Header.Get("Pitot-Request") != "1" || r.Header.Get("Content-Type") != "application/json" {
 			t.Error("UI headers/method missing")
 		}
 		time.Sleep(15 * time.Millisecond)
@@ -168,7 +168,7 @@ func TestRefreshIncludesAnnotationsAndMeasuresWholeOperation(t *testing.T) {
 	defer server.Close()
 	q := newQueryRun()
 	q.targets = targets
-	q.request(context.Background(), server.Client(), server.URL, "fanout_session=test", 0)
+	q.request(context.Background(), server.Client(), server.URL, "pitot_session=test", 0)
 	if !reflect.DeepEqual(paths, []string{"/api/queries/run", "/api/annotations/query"}) || q.failures != 0 || q.hist.snapshot().Count != 1 || q.hist.snapshot().MeanMs < 30 {
 		t.Fatalf("paths=%v failures=%d latency=%+v", paths, q.failures, q.hist.snapshot())
 	}
@@ -200,14 +200,14 @@ func TestTraceReferencesRemainScopedToDiscoveryWindow(t *testing.T) {
 		window := queryWindows[count]
 		count++
 		params := r.URL.Query()
-		if r.Method != http.MethodGet || r.URL.Path != "/api/traces/trace-"+window || params.Get("namespace") != "bench namespace" || params.Get("from") != bounds[window].from || params.Get("to") != bounds[window].to || params.Get("limit") != "200" || len(params) != 4 || r.Header.Get("Fanout-Request") != "1" {
+		if r.Method != http.MethodGet || r.URL.Path != "/api/traces/trace-"+window || params.Get("namespace") != "bench namespace" || params.Get("from") != bounds[window].from || params.Get("to") != bounds[window].to || params.Get("limit") != "200" || len(params) != 4 || r.Header.Get("Pitot-Request") != "1" {
 			t.Errorf("incorrect detail request %s", r.URL)
 		}
 		fmt.Fprint(w, `{"data":{"spans":[{"span_id":"span"}]}}`)
 	}))
 	defer server.Close()
 	for i := range queryWindows {
-		q.request(context.Background(), server.Client(), server.URL, "fanout_session=test", i*3+2)
+		q.request(context.Background(), server.Client(), server.URL, "pitot_session=test", i*3+2)
 	}
 	if q.failures != 0 || q.hist.snapshot().Count != 5 {
 		t.Fatalf("failures=%d completed=%d", q.failures, q.hist.snapshot().Count)
@@ -232,7 +232,7 @@ func TestTraceDetailFallsBackOnlyWithinItsOwnWindow(t *testing.T) {
 		fmt.Fprint(w, `{"traces":[{"trace_id":"this-window","namespace":"ns"}]}`)
 	}))
 	defer server.Close()
-	q.request(context.Background(), server.Client(), server.URL, "fanout_session=test", 5)
+	q.request(context.Background(), server.Client(), server.URL, "pitot_session=test", 5)
 	if q.failures != 0 || q.traces["1h"].id != "this-window" || q.traces["15m"].id != "other-window" {
 		t.Fatalf("traces=%v failures=%d", q.traces, q.failures)
 	}
@@ -259,7 +259,7 @@ func TestSustainedQueryGateFailsWhenExemplarsStayEmpty(t *testing.T) {
 	q := newQueryRun()
 	q.targets = targets
 	for i := 0; i < 2*len(targets); i++ {
-		q.request(context.Background(), server.Client(), server.URL, "fanout_session=test", i)
+		q.request(context.Background(), server.Client(), server.URL, "pitot_session=test", i)
 	}
 	trial := Trial{
 		Spec:           PhaseSpec{Kind: "sustained", Signal: Mixed, QueryRate: 30},
@@ -293,7 +293,7 @@ func TestEmptyDiscoveredTraceDetailFails(t *testing.T) {
 			q := newQueryRun()
 			q.targets = []queryTarget{{name: "trace-detail", window: "1h"}}
 			q.traces["1h"] = traceReference{"trace", "ns", "2026-10-01T12:00:00.000Z", "2026-10-01T13:00:00.000Z"}
-			q.request(context.Background(), server.Client(), server.URL, "fanout_session=test", 0)
+			q.request(context.Background(), server.Client(), server.URL, "pitot_session=test", 0)
 			if q.failures != 1 || q.hist.snapshot().Count != 0 {
 				t.Fatal("empty detail counted as success")
 			}
@@ -338,7 +338,7 @@ func TestAnyOperationRequestOrPanelErrorFails(t *testing.T) {
 				index = 1
 				q.selections["15m/service_map"] = drillSelection{"2026-10-01T12:00:00.000Z", "2026-10-01T13:00:00.000Z", map[string]string{"service": "checkout"}}
 			}
-			q.request(context.Background(), server.Client(), server.URL, "fanout_session=test", index)
+			q.request(context.Background(), server.Client(), server.URL, "pitot_session=test", index)
 			if q.failures != 1 || q.hist.snapshot().Count != 0 {
 				t.Fatalf("failures=%d completed=%d", q.failures, q.hist.snapshot().Count)
 			}
@@ -368,7 +368,7 @@ func TestEmptyDashboardDoesNotInventDrillSelection(t *testing.T) {
 	defer server.Close()
 	q := newQueryRun()
 	q.targets = targets
-	q.request(context.Background(), server.Client(), server.URL, "fanout_session=test", 2)
+	q.request(context.Background(), server.Client(), server.URL, "pitot_session=test", 2)
 	if requests != 2 || q.failures != 0 || q.hist.snapshot().Count != 1 || !strings.Contains(q.operationSummary("mixed"), "| dashboard-refresh | 1 | 1 |") {
 		t.Fatalf("requests=%d failures=%d summary=%s", requests, q.failures, q.operationSummary("mixed"))
 	}
@@ -458,7 +458,7 @@ func TestDiscoveryFallbackKeepsOneUserOperationPerSlot(t *testing.T) {
 	q.targets = targets
 	for i, want := range [][]string{{"/api/queries/run", "/api/annotations/query"}, {"/api/queries/exemplars"}, {"/api/traces/trace"}} {
 		paths = nil
-		q.request(context.Background(), server.Client(), server.URL, "fanout_session=test", 2)
+		q.request(context.Background(), server.Client(), server.URL, "pitot_session=test", 2)
 		if !reflect.DeepEqual(paths, want) {
 			t.Fatalf("slot %d: paths=%v want %v", i, paths, want)
 		}

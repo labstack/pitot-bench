@@ -27,7 +27,7 @@ func TestFetchMaturityReleaseVerifiesNamedAsset(t *testing.T) {
 	var archive bytes.Buffer
 	gz := gzip.NewWriter(&archive)
 	tarball := tar.NewWriter(gz)
-	if err := tarball.WriteHeader(&tar.Header{Name: "./fanout", Typeflag: tar.TypeReg, Mode: 0o755, Size: 6}); err != nil {
+	if err := tarball.WriteHeader(&tar.Header{Name: "./pitot", Typeflag: tar.TypeReg, Mode: 0o755, Size: 6}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := tarball.Write([]byte("binary")); err != nil {
@@ -40,8 +40,8 @@ func TestFetchMaturityReleaseVerifiesNamedAsset(t *testing.T) {
 		t.Fatal(err)
 	}
 	digest := fmt.Sprintf("%x", sha256.Sum256(archive.Bytes()))
-	const base = "https://github.com/labstack/fanout/releases/download/v2026.10.1-alpha/"
-	const asset = "fanout_v2026.10.1-alpha_linux_amd64.tar.gz"
+	const base = "https://github.com/labstack/pitot/releases/download/v2026.11.5-alpha/"
+	const asset = "pitot_v2026.11.5-alpha_linux_amd64.tar.gz"
 	requests := 0
 	previous := http.DefaultClient
 	t.Cleanup(func() { http.DefaultClient = previous })
@@ -58,7 +58,7 @@ func TestFetchMaturityReleaseVerifiesNamedAsset(t *testing.T) {
 		}
 		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(bytes.NewReader(body)), Header: make(http.Header)}, nil
 	})}
-	path, identity, err := fetchFanout(context.Background(), t.TempDir(), "v2026.10.1-alpha", "linux", "amd64")
+	path, identity, err := fetchPitot(context.Background(), t.TempDir(), "v2026.11.5-alpha", "linux", "amd64")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,25 +86,25 @@ func TestSSHTargetValidation(t *testing.T) {
 	}
 }
 
-func TestFanoutReleaseVersionsAndAssets(t *testing.T) {
-	for _, version := range []string{"v2026.10.1-alpha", "v2026.10.2-beta", "v2026.10.3-rc", "v2026.10.4", "v2026.1.0"} {
-		got, err := fanoutAsset(version, "linux", "amd64")
+func TestPitotReleaseVersionsAndAssets(t *testing.T) {
+	for _, version := range []string{"v2026.11.5-alpha", "v2026.10.2-beta", "v2026.10.3-rc", "v2026.10.4", "v2026.1.0"} {
+		got, err := pitotAsset(version, "linux", "amd64")
 		if err != nil {
 			t.Fatal(err)
 		}
-		if want := "fanout_" + version + "_linux_amd64.tar.gz"; got != want {
+		if want := "pitot_" + version + "_linux_amd64.tar.gz"; got != want {
 			t.Errorf("asset=%q want %q", got, want)
 		}
 	}
-	for _, version := range []string{"2026.10.1", "v2026.0.1", "v2026.13.1", "v2026.01.1", "v2026.10.01", "v2026.10.1-alpha.1", "v2026.10.1-preview", "v2026.10.1/evil", "v2026.10.1-rc;bad", ""} {
-		if _, err := fanoutAsset(version, "linux", "amd64"); err == nil {
+	for _, version := range []string{"2026.10.1", "v2026.0.1", "v2026.13.1", "v2026.01.1", "v2026.10.01", "v2026.11.5-alpha.1", "v2026.10.1-preview", "v2026.10.1/evil", "v2026.10.1-rc;bad", ""} {
+		if _, err := pitotAsset(version, "linux", "amd64"); err == nil {
 			t.Errorf("accepted invalid release %q", version)
 		}
 	}
 }
 
 func TestParseRemotePlatformIgnoresLoginNoise(t *testing.T) {
-	osName, arch, err := parseRemotePlatform("Welcome to the host\n__FANOUT_BENCH_PLATFORM__ Linux aarch64\n")
+	osName, arch, err := parseRemotePlatform("Welcome to the host\n__PITOT_BENCH_PLATFORM__ Linux aarch64\n")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,9 +122,9 @@ func TestGoInstallOutputUsesCrossCompileDirectory(t *testing.T) {
 }
 
 func TestManagedRemoteCommandQuotesEveryValue(t *testing.T) {
-	cfg := Config{Host: "root@192.0.2.10", HostDescription: "Hetzner Cloud ccx33, fsn1, ubuntu-24.04", SSHPort: 2222, SSHIdentity: "/keys/bench key", FanoutVersion: "v2026.10.1-alpha", Preset: "quick", Repeat: 1, BatchSize: 1000, TelemetrygenVersion: "v0.157.0"}
-	got := managedRemoteCommand("/tmp/fanout-bench-safe", cfg, "dev", "asset#sha256=abc")
-	for _, want := range []string{"'managed'", "'--fanout-version'", "'v2026.10.1-alpha'", "'--provisioned-host'", "'root@<host>'", "'--host-description'", "'Hetzner Cloud ccx33, fsn1, ubuntu-24.04'", "'--provisioned-ssh-port'", "'2222'", "'--provisioned-ssh-identity'", "'/keys/bench key'"} {
+	cfg := Config{Host: "root@192.0.2.10", HostDescription: "Hetzner Cloud ccx33, fsn1, ubuntu-24.04", SSHPort: 2222, SSHIdentity: "/keys/bench key", PitotVersion: "v2026.11.5-alpha", Preset: "quick", Repeat: 1, BatchSize: 1000, TelemetrygenVersion: "v0.157.0"}
+	got := managedRemoteCommand("/tmp/pitot-bench-safe", cfg, "dev", "asset#sha256=abc")
+	for _, want := range []string{"'managed'", "'--pitot-version'", "'v2026.11.5-alpha'", "'--provisioned-host'", "'root@<host>'", "'--host-description'", "'Hetzner Cloud ccx33, fsn1, ubuntu-24.04'", "'--provisioned-ssh-port'", "'2222'", "'--provisioned-ssh-identity'", "'/keys/bench key'"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("command missing %s: %s", want, got)
 		}
@@ -138,7 +138,7 @@ func TestManagedRemoteCommandQuotesEveryValue(t *testing.T) {
 }
 
 func TestSplitManagedRemoteCommand(t *testing.T) {
-	cfg := Config{Host: "root@192.0.2.10", SSHPort: 2222, GeneratorHost: "root@192.0.2.11", GeneratorAddress: "10.77.0.3", FanoutListen: "10.77.0.2", GeneratorHostDescription: "Generator's ccx43"}
+	cfg := Config{Host: "root@192.0.2.10", SSHPort: 2222, GeneratorHost: "root@192.0.2.11", GeneratorAddress: "10.77.0.3", PitotListen: "10.77.0.2", GeneratorHostDescription: "Generator's ccx43"}
 	got := managedRemoteCommand("/tmp/run", cfg, "dev", "verified")
 	for _, want := range []string{
 		"chmod 0600 '/tmp/run/generator_key'",
@@ -164,7 +164,7 @@ func TestSplitManagedRemoteCommand(t *testing.T) {
 }
 
 func TestGeneratorSSHDConfigIsScopedToRun(t *testing.T) {
-	for _, marker := range []string{"fanout-bench-first", "fanout-bench-second"} {
+	for _, marker := range []string{"pitot-bench-first", "pitot-bench-second"} {
 		path := shellQuote("/etc/ssh/sshd_config.d/" + marker + ".conf")
 		key := "ssh-ed25519 AAAAtest " + marker
 		install := authorizeGeneratorKeyCommand(key+"\n", marker)
@@ -188,17 +188,17 @@ func TestGeneratorSSHDConfigIsScopedToRun(t *testing.T) {
 }
 
 func TestGeneratorHostValidation(t *testing.T) {
-	valid := Config{Host: "root@fanout", GeneratorHost: "root@generator", GeneratorAddress: "10.77.0.3", FanoutListen: "10.77.0.2"}
+	valid := Config{Host: "root@pitot", GeneratorHost: "root@generator", GeneratorAddress: "10.77.0.3", PitotListen: "10.77.0.2"}
 	if err := ValidateGeneratorHosts(valid); err != nil {
 		t.Fatal(err)
 	}
 	for _, value := range []string{"hostname", "0.0.0.0", "::", "10.77.0.2:7520"} {
-		for _, field := range []string{"generator", "fanout"} {
+		for _, field := range []string{"generator", "pitot"} {
 			cfg := valid
 			if field == "generator" {
 				cfg.GeneratorAddress = value
 			} else {
-				cfg.FanoutListen = value
+				cfg.PitotListen = value
 			}
 			if err := ValidateGeneratorHosts(cfg); err == nil {
 				t.Errorf("accepted %s IP %q", field, value)
@@ -223,7 +223,7 @@ func TestExtractBinarySelectsOnlyNamedRegularFile(t *testing.T) {
 	}
 	gz := gzip.NewWriter(file)
 	tw := tar.NewWriter(gz)
-	for name, body := range map[string]string{"docs/README": "ignore", "release/fanout": "binary"} {
+	for name, body := range map[string]string{"docs/README": "ignore", "release/pitot": "binary"} {
 		if err := tw.WriteHeader(&tar.Header{Name: name, Mode: 0o755, Size: int64(len(body)), Typeflag: tar.TypeReg}); err != nil {
 			t.Fatal(err)
 		}
@@ -240,8 +240,8 @@ func TestExtractBinarySelectsOnlyNamedRegularFile(t *testing.T) {
 	if err := file.Close(); err != nil {
 		t.Fatal(err)
 	}
-	destination := filepath.Join(dir, "fanout")
-	if err := extractBinary(archivePath, destination, "fanout"); err != nil {
+	destination := filepath.Join(dir, "pitot")
+	if err := extractBinary(archivePath, destination, "pitot"); err != nil {
 		t.Fatal(err)
 	}
 	data, err := os.ReadFile(destination)
@@ -255,7 +255,7 @@ func TestExtractBinarySelectsOnlyNamedRegularFile(t *testing.T) {
 
 func TestCompleteSetupCapturesCredentialsWithoutLogging(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Fanout-Request") != "1" {
+		if r.Header.Get("Pitot-Request") != "1" {
 			t.Error("missing request marker")
 		}
 		var body map[string]string
@@ -265,7 +265,7 @@ func TestCompleteSetupCapturesCredentialsWithoutLogging(t *testing.T) {
 		if body["setup_token"] != "setup-secret" {
 			t.Errorf("setup token=%q", body["setup_token"])
 		}
-		http.SetCookie(w, &http.Cookie{Name: "fanout_session", Value: "session-secret", Path: "/"})
+		http.SetCookie(w, &http.Cookie{Name: "pitot_session", Value: "session-secret", Path: "/"})
 		_ = json.NewEncoder(w).Encode(map[string]string{"ingest_token": "ingest-secret"})
 	}))
 	defer server.Close()
@@ -273,7 +273,7 @@ func TestCompleteSetupCapturesCredentialsWithoutLogging(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ingest != "ingest-secret" || cookie != "fanout_session=session-secret" {
+	if ingest != "ingest-secret" || cookie != "pitot_session=session-secret" {
 		t.Fatalf("credentials=%q %q", ingest, cookie)
 	}
 }
@@ -294,7 +294,7 @@ func TestSetupTokenPatternCanBeScrubbed(t *testing.T) {
 // existing file there would discard a completed run's report.
 func TestCopyEvidenceFileOverwritesPreviousRun(t *testing.T) {
 	dir := t.TempDir()
-	source := filepath.Join(dir, "fanout.log")
+	source := filepath.Join(dir, "pitot.log")
 	destination := filepath.Join(dir, "evidence.log")
 	if err := os.WriteFile(source, []byte("second run\n"), 0o600); err != nil {
 		t.Fatal(err)
@@ -337,48 +337,48 @@ func TestKnownHostsReachesSSHAndSCPArgs(t *testing.T) {
 	}
 }
 
-func TestValidateFanoutSource(t *testing.T) {
+func TestValidatePitotSource(t *testing.T) {
 	dir := t.TempDir()
-	binary := filepath.Join(dir, "fanout")
+	binary := filepath.Join(dir, "pitot")
 	if err := os.WriteFile(binary, []byte("binary"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	valid := []Config{
-		{FanoutVersion: "v2026.10.8-alpha"},
-		{FanoutVersion: "explore-fdfbf7f5", FanoutBinary: binary},
-		{FanoutVersion: "main.abc123_dirty", FanoutBinary: binary},
+		{PitotVersion: "v2026.10.8-alpha"},
+		{PitotVersion: "explore-fdfbf7f5", PitotBinary: binary},
+		{PitotVersion: "main.abc123_dirty", PitotBinary: binary},
 	}
 	for _, cfg := range valid {
-		if err := ValidateFanoutSource(cfg); err != nil {
+		if err := ValidatePitotSource(cfg); err != nil {
 			t.Errorf("%+v: %v", cfg, err)
 		}
 	}
 	invalid := []Config{
-		{FanoutVersion: "unknown"},
-		{FanoutVersion: "explore-fdfbf7f5"},
-		{FanoutVersion: "unknown", FanoutBinary: binary},
-		{FanoutVersion: "", FanoutBinary: binary},
-		{FanoutVersion: "v2026.10.8-alpha", FanoutBinary: binary},
-		{FanoutVersion: "-explore", FanoutBinary: binary},
-		{FanoutVersion: "explore/evil", FanoutBinary: binary},
-		{FanoutVersion: "explore;bad", FanoutBinary: binary},
-		{FanoutVersion: "explore", FanoutBinary: filepath.Join(dir, "missing")},
-		{FanoutVersion: "explore", FanoutBinary: dir},
+		{PitotVersion: "unknown"},
+		{PitotVersion: "explore-fdfbf7f5"},
+		{PitotVersion: "unknown", PitotBinary: binary},
+		{PitotVersion: "", PitotBinary: binary},
+		{PitotVersion: "v2026.10.8-alpha", PitotBinary: binary},
+		{PitotVersion: "-explore", PitotBinary: binary},
+		{PitotVersion: "explore/evil", PitotBinary: binary},
+		{PitotVersion: "explore;bad", PitotBinary: binary},
+		{PitotVersion: "explore", PitotBinary: filepath.Join(dir, "missing")},
+		{PitotVersion: "explore", PitotBinary: dir},
 	}
 	for _, cfg := range invalid {
-		if err := ValidateFanoutSource(cfg); err == nil {
-			t.Errorf("accepted invalid Fanout source %+v", cfg)
+		if err := ValidatePitotSource(cfg); err == nil {
+			t.Errorf("accepted invalid Pitot source %+v", cfg)
 		}
 	}
 }
 
-func TestStageLocalFanoutRejectsNonELFAndWrongArch(t *testing.T) {
+func TestStageLocalPitotRejectsNonELFAndWrongArch(t *testing.T) {
 	dir := t.TempDir()
-	script := filepath.Join(dir, "fanout")
+	script := filepath.Join(dir, "pitot")
 	if err := os.WriteFile(script, []byte("#!/bin/sh\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := stageLocalFanout(script, t.TempDir(), "amd64"); err == nil {
+	if _, _, err := stageLocalPitot(script, t.TempDir(), "amd64"); err == nil {
 		t.Error("accepted a non-ELF binary")
 	}
 	// The test binary itself is an ELF only on Linux; elsewhere skip the arch check.
@@ -387,25 +387,25 @@ func TestStageLocalFanoutRejectsNonELFAndWrongArch(t *testing.T) {
 		return
 	}
 	other := map[string]string{"amd64": "arm64", "arm64": "amd64"}[runtime.GOARCH]
-	if _, _, err := stageLocalFanout(self, t.TempDir(), other); err == nil {
+	if _, _, err := stageLocalPitot(self, t.TempDir(), other); err == nil {
 		t.Error("accepted a binary for the wrong architecture")
 	}
-	path, artifact, err := stageLocalFanout(self, t.TempDir(), runtime.GOARCH)
+	path, artifact, err := stageLocalPitot(self, t.TempDir(), runtime.GOARCH)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if filepath.Base(path) != "fanout" || !strings.HasPrefix(artifact, UnreleasedArtifactPrefix+"#sha256=") {
+	if filepath.Base(path) != "pitot" || !strings.HasPrefix(artifact, UnreleasedArtifactPrefix+"#sha256=") {
 		t.Errorf("path=%q artifact=%q", path, artifact)
 	}
 }
 
 func TestUnreleasedBuildIsMarkedNotPublishable(t *testing.T) {
-	report := Report{Build: Build{FanoutVersion: "explore-fdfbf7f5", FanoutArtifact: UnreleasedArtifactPrefix + "#sha256=00"}}
+	report := Report{Build: Build{PitotVersion: "explore-fdfbf7f5", PitotArtifact: UnreleasedArtifactPrefix + "#sha256=00"}}
 	s := summarize(report, 0, 0)
 	if len(s.Warnings) == 0 || !strings.Contains(s.Warnings[0], "must not be published") {
 		t.Errorf("warnings=%q", s.Warnings)
 	}
-	report.Build.FanoutArtifact = "https://github.com/labstack/fanout/releases/download/v2026.10.8-alpha/x#sha256=00"
+	report.Build.PitotArtifact = "https://github.com/labstack/pitot/releases/download/v2026.10.8-alpha/x#sha256=00"
 	for _, warning := range summarize(report, 0, 0).Warnings {
 		if strings.Contains(warning, "must not be published") {
 			t.Errorf("release run marked unpublishable: %q", warning)

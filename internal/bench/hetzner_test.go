@@ -59,7 +59,7 @@ esac
 			write("fake/just", "#!/bin/sh\necho build >> \"$MOCK_ROOT/builds\"\n")
 			write("fake/ssh", "#!/bin/sh\nexit 0\n")
 			write("fake/sleep", "#!/bin/sh\nexit 0\n")
-			write("bin/fanout-bench", `#!/usr/bin/env bash
+			write("bin/pitot-bench", `#!/usr/bin/env bash
 printf '%s\n' "$*" >> "$MOCK_ROOT/runs"
 if [[ $MOCK_MODE == interrupt ]]; then exec /bin/sleep 60; fi
 if [[ $MOCK_MODE == success ]]; then
@@ -73,7 +73,7 @@ fi
 if [[ $MOCK_MODE == failure && $* == *fail* ]]; then exit 7; fi
 `)
 			cmd := exec.Command("bash", filepath.Join(dir, "scripts/hetzner.sh"), "--parallel-groups", "--output", "pass", "--", "--output", "fail", "--signals", "mixed")
-			cmd.Env = append(os.Environ(), "PATH="+filepath.Join(dir, "fake")+":"+os.Getenv("PATH"), "FANOUT_BENCH_HCLOUD_SSH_KEY=test", "FANOUT_BENCH_GROUP_CHILD=", "MOCK_ROOT="+dir, "MOCK_MODE="+mode)
+			cmd.Env = append(os.Environ(), "PATH="+filepath.Join(dir, "fake")+":"+os.Getenv("PATH"), "PITOT_BENCH_HCLOUD_SSH_KEY=test", "PITOT_BENCH_GROUP_CHILD=", "MOCK_ROOT="+dir, "MOCK_MODE="+mode)
 			cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 			var output bytes.Buffer
 			cmd.Stdout = &output
@@ -146,7 +146,7 @@ if [[ $MOCK_MODE == failure && $* == *fail* ]]; then exit 7; fi
 					if f == "--name" {
 						deletion := fmt.Sprintf("%s delete %s", fields[0], fields[i+1])
 						if fields[0] == "server" {
-							network := strings.TrimSuffix(strings.TrimSuffix(fields[i+1], "-fanout"), "-generator")
+							network := strings.TrimSuffix(strings.TrimSuffix(fields[i+1], "-pitot"), "-generator")
 							if strings.Index(string(events), "network delete "+network) < strings.Index(string(events), deletion) {
 								t.Fatal("network deleted before server")
 							}

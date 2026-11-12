@@ -2,7 +2,7 @@ package bench
 
 import "time"
 
-const SchemaVersion = "fanout-bench/v1"
+const SchemaVersion = "pitot-bench/v1"
 
 type Signal string
 
@@ -20,7 +20,7 @@ type Config struct {
 	HostDescription          string
 	GeneratorHost            string
 	GeneratorAddress         string
-	FanoutListen             string
+	PitotListen              string
 	GeneratorHostDescription string
 	GeneratorSSH             string
 	GeneratorSSHPort         int
@@ -39,10 +39,10 @@ type Config struct {
 	Token                    string
 	MetricsToken             string
 	OutputDir                string
-	FanoutVersion            string
-	FanoutCommit             string
-	FanoutArtifact           string
-	FanoutBinary             string
+	PitotVersion             string
+	PitotCommit              string
+	PitotArtifact            string
+	PitotBinary              string
 	DataDir                  string
 	SampleInterval           time.Duration
 	GeneratorTimeout         time.Duration
@@ -103,9 +103,9 @@ type Build struct {
 	HarnessCommit       string `json:"harness_commit"`
 	HarnessDirty        bool   `json:"harness_dirty"`
 	TelemetrygenVersion string `json:"telemetrygen_version"`
-	FanoutVersion       string `json:"fanout_version"`
-	FanoutCommit        string `json:"fanout_commit,omitempty"`
-	FanoutArtifact      string `json:"fanout_artifact,omitempty"`
+	PitotVersion        string `json:"pitot_version"`
+	PitotCommit         string `json:"pitot_commit,omitempty"`
+	PitotArtifact       string `json:"pitot_artifact,omitempty"`
 }
 
 type Settings struct {
@@ -210,7 +210,7 @@ type Trial struct {
 	GeneratorProcesses  int              `json:"generator_processes"`
 	GeneratorFailures   int              `json:"generator_failures"`
 	GeneratorCPU        *GeneratorCPU    `json:"generator_cpu,omitempty"`
-	ProcessRestarted    bool             `json:"fanout_restarted"`
+	ProcessRestarted    bool             `json:"pitot_restarted"`
 	Resources           Resources        `json:"resources"`
 	QueryLatency        Latency          `json:"query_latency_ms,omitempty"`
 	QueryKindCompleted  map[string]int64 `json:"query_completed_by_kind,omitempty"`

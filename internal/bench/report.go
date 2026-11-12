@@ -64,7 +64,7 @@ func LoadReport(path string) (Report, error) {
 
 func atomicWrite(path string, data []byte) error {
 	dir := filepath.Dir(path)
-	tmp, err := os.CreateTemp(dir, ".fanout-bench-*")
+	tmp, err := os.CreateTemp(dir, ".pitot-bench-*")
 	if err != nil {
 		return err
 	}
@@ -88,15 +88,15 @@ func printRunHeader(w io.Writer, r *Report, plan []PhaseSpec) {
 		minutes += phase.Duration.Seconds() / 60
 	}
 	fmt.Fprintln(w, "╭────────────────────────────────────────────────────────────────────╮")
-	fmt.Fprintln(w, "│  FANOUT BENCH  •  accepted-row performance, with evidence          │")
+	fmt.Fprintln(w, "│  PITOT BENCH  •  accepted-row performance, with evidence          │")
 	fmt.Fprintln(w, "╰────────────────────────────────────────────────────────────────────╯")
 	t := tabwriter.NewWriter(w, 2, 4, 2, ' ', 0)
 	fmt.Fprintf(t, "  Target\t%s  (%s)\n", r.Settings.Endpoint, r.Settings.Transport)
-	fmt.Fprintf(t, "  Fanout\t%s  commit=%s\n", display(r.Build.FanoutVersion), display(r.Build.FanoutCommit))
+	fmt.Fprintf(t, "  Pitot\t%s  commit=%s\n", display(r.Build.PitotVersion), display(r.Build.PitotCommit))
 	fmt.Fprintf(t, "  Generator\ttelemetrygen %s  same-host=%t\n", display(r.Build.TelemetrygenVersion), r.Host.GeneratorLocal)
 	fmt.Fprintf(t, "  Machine\t%s/%s  %s  %d logical CPUs  %s RAM\n", r.Host.OS, r.Host.Architecture, display(r.Host.CPUModel), r.Host.LogicalCPUs, formatBytes(float64(r.Host.MemoryBytes)))
 	fmt.Fprintf(t, "  Suite\t%s  repeat=%d  %d phases  ~%.1f min load time\n", r.Settings.Preset, r.Settings.Repeat, len(plan), minutes)
-	fmt.Fprintf(t, "  Evidence\tFanout counters @ %s  samples every %.1fs\n", r.Settings.MetricsURL, r.Settings.SampleSeconds)
+	fmt.Fprintf(t, "  Evidence\tPitot counters @ %s  samples every %.1fs\n", r.Settings.MetricsURL, r.Settings.SampleSeconds)
 	fmt.Fprintf(t, "  Workload ID\t%s\n", r.WorkloadSHA256[:16])
 	t.Flush()
 }
@@ -138,10 +138,10 @@ func printSummary(w io.Writer, r Report) {
 
 func Markdown(r Report) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "# Fanout performance report\n\n")
+	fmt.Fprintf(&b, "# Pitot performance report\n\n")
 	fmt.Fprintf(&b, "> **%s** — %s · `%s`\n\n", map[bool]string{true: "VALID", false: "INVALID"}[r.Summary.Passed], r.StartedAt.Format("2 Jan 2006 15:04 MST"), r.RunID)
 	fmt.Fprintf(&b, "## Headline results\n\n")
-	fmt.Fprintf(&b, "| Workload | Fanout accepted/s | Offered/s | Avg Fanout CPU | Peak RSS |\n|---|---:|---:|---:|---:|\n")
+	fmt.Fprintf(&b, "| Workload | Pitot accepted/s | Offered/s | Avg Pitot CPU | Peak RSS |\n|---|---:|---:|---:|---:|\n")
 	for _, row := range []struct {
 		name string
 		peak Peak
@@ -152,7 +152,7 @@ func Markdown(r Report) string {
 		}
 		fmt.Fprintf(&b, "| %s | %s | %s | %.2f cores | %s |\n", row.name, formatNumber(row.peak.AcceptedPerSecond), formatNumber(row.peak.OfferedPerSecond), row.peak.AverageCPUCores, formatBytes(row.peak.PeakRSSBytes))
 	}
-	fmt.Fprintf(&b, "\n**Meaning:** accepted throughput is the delta of `fanout_ingest_rows_total` divided by the interval between the two counter scrapes that bracket the phase. It is not telemetrygen's requested or locally generated count.\n\n")
+	fmt.Fprintf(&b, "\n**Meaning:** accepted throughput is the delta of `pitot_ingest_rows_total` divided by the interval between the two counter scrapes that bracket the phase. It is not telemetrygen's requested or locally generated count.\n\n")
 	for _, t := range r.Trials {
 		if t.Spec.Kind == "sustained" {
 			fmt.Fprintf(&b, "**Sustained mixed topology:** %d processes per signal, %d workers per process.\n\n", t.Spec.ProcessesPerSignal, t.Spec.WorkersPerProcess)
@@ -163,14 +163,14 @@ func Markdown(r Report) string {
 	if r.Host.Description != "" {
 		machine += " · " + r.Host.Description
 	}
-	settings := [][2]string{{"Fanout version", display(r.Build.FanoutVersion)}, {"Fanout commit", display(r.Build.FanoutCommit)}, {"Fanout artifact", display(r.Build.FanoutArtifact)}, {"Harness", r.Build.HarnessVersion + " (`" + r.Build.HarnessCommit + "`)"}, {"telemetrygen", display(r.Build.TelemetrygenVersion)}, {"Machine", fmt.Sprintf("%s/%s · %s · %d logical CPUs · %s RAM", r.Host.OS, r.Host.Architecture, machine, r.Host.LogicalCPUs, formatBytes(float64(r.Host.MemoryBytes)))}, {"Generator host", display(r.Host.GeneratorDescription)}, {"Generator placement", map[bool]string{true: "same host as Fanout", false: "separate/remote"}[r.Host.GeneratorLocal]}, {"Preset", r.Settings.Preset}, {"Transport", r.Settings.Transport}, {"Batch size", fmt.Sprintf("%d", r.Settings.BatchSize)}, {"Trace shape", "1 parent + 1 child span per telemetrygen trace tick"}, {"Repeat", fmt.Sprintf("%d", r.Settings.Repeat)}, {"Sample interval", fmt.Sprintf("%.1fs", r.Settings.SampleSeconds)}, {"Workload SHA-256", "`" + r.WorkloadSHA256 + "`"}}
+	settings := [][2]string{{"Pitot version", display(r.Build.PitotVersion)}, {"Pitot commit", display(r.Build.PitotCommit)}, {"Pitot artifact", display(r.Build.PitotArtifact)}, {"Harness", r.Build.HarnessVersion + " (`" + r.Build.HarnessCommit + "`)"}, {"telemetrygen", display(r.Build.TelemetrygenVersion)}, {"Machine", fmt.Sprintf("%s/%s · %s · %d logical CPUs · %s RAM", r.Host.OS, r.Host.Architecture, machine, r.Host.LogicalCPUs, formatBytes(float64(r.Host.MemoryBytes)))}, {"Generator host", display(r.Host.GeneratorDescription)}, {"Generator placement", map[bool]string{true: "same host as Pitot", false: "separate/remote"}[r.Host.GeneratorLocal]}, {"Preset", r.Settings.Preset}, {"Transport", r.Settings.Transport}, {"Batch size", fmt.Sprintf("%d", r.Settings.BatchSize)}, {"Trace shape", "1 parent + 1 child span per telemetrygen trace tick"}, {"Repeat", fmt.Sprintf("%d", r.Settings.Repeat)}, {"Sample interval", fmt.Sprintf("%.1fs", r.Settings.SampleSeconds)}, {"Workload SHA-256", "`" + r.WorkloadSHA256 + "`"}}
 	for _, row := range settings {
 		fmt.Fprintf(&b, "| %s | %s |\n", row[0], row[1])
 	}
 	for _, stop := range r.SweepStops {
 		fmt.Fprintf(&b, "\n**Sweep stopped after %s:** %s. Skipped: %s.\n", stop.AfterPhase, stop.Reason, strings.Join(stop.SkippedPhases, ", "))
 	}
-	fmt.Fprintf(&b, "\n## Complete phase breakdown\n\n| Phase | Signal | Topology (processes per signal × workers) | Duration | Offered/s | Accepted/s | Ratio | Fanout CPU cores | Generator CPU cores / logical CPUs | Peak RSS | Queue peak | Result |\n|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|\n")
+	fmt.Fprintf(&b, "\n## Complete phase breakdown\n\n| Phase | Signal | Topology (processes per signal × workers) | Duration | Offered/s | Accepted/s | Ratio | Pitot CPU cores | Generator CPU cores / logical CPUs | Peak RSS | Queue peak | Result |\n|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|\n")
 	for _, t := range r.Trials {
 		generatorCPU := "n/a"
 		if t.GeneratorCPU != nil {
@@ -225,9 +225,9 @@ func redactedHost(host string) string {
 
 func reproductionRunCommand(c Config) string {
 	if c.Host != "" {
-		parts := []string{"fanout-bench run", "--host " + shellQuote(redactedHost(c.Host)), "--fanout-version " + shellQuote(c.FanoutVersion), "--preset " + c.Preset, "--repeat " + fmt.Sprint(c.Repeat), "--telemetrygen-version " + shellQuote(c.TelemetrygenVersion), "--batch-size " + fmt.Sprint(c.BatchSize), "--sample-interval " + c.SampleInterval.String(), "--cooldown " + c.Cooldown.String()}
+		parts := []string{"pitot-bench run", "--host " + shellQuote(redactedHost(c.Host)), "--pitot-version " + shellQuote(c.PitotVersion), "--preset " + c.Preset, "--repeat " + fmt.Sprint(c.Repeat), "--telemetrygen-version " + shellQuote(c.TelemetrygenVersion), "--batch-size " + fmt.Sprint(c.BatchSize), "--sample-interval " + c.SampleInterval.String(), "--cooldown " + c.Cooldown.String()}
 		if c.GeneratorHost != "" {
-			parts = append(parts, "--generator-host 'root@<generator-host>'", "--generator-address '<generator-address>'", "--fanout-listen '<fanout-listen>'")
+			parts = append(parts, "--generator-host 'root@<generator-host>'", "--generator-address '<generator-address>'", "--pitot-listen '<pitot-listen>'")
 		}
 		if c.SSHPort != 0 && c.SSHPort != 22 {
 			parts = append(parts, "--ssh-port "+fmt.Sprint(c.SSHPort))
@@ -252,22 +252,22 @@ func reproductionRunCommand(c Config) string {
 		}
 		return strings.Join(parts, " ")
 	}
-	env := []string{"FANOUT_BENCH_INGEST_TOKEN=…"}
-	parts := []string{"fanout-bench run", "--preset " + c.Preset, "--endpoint " + shellQuote(c.Endpoint), "--metrics-url " + shellQuote(c.MetricsURL), "--fanout-version " + shellQuote(c.FanoutVersion), "--repeat " + fmt.Sprint(c.Repeat)}
+	env := []string{"PITOT_BENCH_INGEST_TOKEN=…"}
+	parts := []string{"pitot-bench run", "--preset " + c.Preset, "--endpoint " + shellQuote(c.Endpoint), "--metrics-url " + shellQuote(c.MetricsURL), "--pitot-version " + shellQuote(c.PitotVersion), "--repeat " + fmt.Sprint(c.Repeat)}
 	if c.Insecure {
 		parts = append(parts, "--insecure")
 	}
 	if c.SameHost {
 		parts = append(parts, "--same-host")
 	}
-	if c.FanoutCommit != "" {
-		parts = append(parts, "--fanout-commit "+shellQuote(c.FanoutCommit))
+	if c.PitotCommit != "" {
+		parts = append(parts, "--pitot-commit "+shellQuote(c.PitotCommit))
 	}
-	if c.FanoutArtifact != "" {
-		parts = append(parts, "--fanout-artifact "+shellQuote(c.FanoutArtifact))
+	if c.PitotArtifact != "" {
+		parts = append(parts, "--pitot-artifact "+shellQuote(c.PitotArtifact))
 	}
 	if c.QueryRate > 0 {
-		env = append(env, "FANOUT_BENCH_QUERY_COOKIE=…")
+		env = append(env, "PITOT_BENCH_QUERY_COOKIE=…")
 		parts = append(parts, "--query-url "+shellQuote(c.QueryURL), "--query-rate "+fmt.Sprint(c.QueryRate))
 	}
 	return strings.Join(append(env, parts...), " ")

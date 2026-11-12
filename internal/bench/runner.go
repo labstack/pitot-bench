@@ -157,7 +157,7 @@ func (r *Runner) validate() error {
 	case strings.TrimSpace(cfg.Endpoint) == "":
 		return errors.New("OTLP endpoint is required")
 	case strings.TrimSpace(cfg.MetricsURL) == "":
-		return errors.New("Fanout metrics URL is required; accepted server rows are the benchmark authority")
+		return errors.New("Pitot metrics URL is required; accepted server rows are the benchmark authority")
 	case cfg.SampleInterval <= 0:
 		return errors.New("sample interval must be positive")
 	case cfg.GeneratorTimeout <= 0:
@@ -250,9 +250,9 @@ func (r *Runner) runPhase(ctx context.Context, spec PhaseSpec, previous []Trial)
 	afterDisk, _ := directorySize(r.Config.DataDir)
 	accepted := subtractCounts(acceptedCounts(after), acceptedCounts(before))
 	if accepted.Spans < 0 || accepted.LogRecords < 0 || accepted.MetricPoints < 0 {
-		return Trial{}, errors.New("Fanout ingest counters moved backwards (process restart or wrong metrics target)")
+		return Trial{}, errors.New("Pitot ingest counters moved backwards (process restart or wrong metrics target)")
 	}
-	dropped := after.total("fanout_rows_dropped_total", nil) - before.total("fanout_rows_dropped_total", nil)
+	dropped := after.total("pitot_rows_dropped_total", nil) - before.total("pitot_rows_dropped_total", nil)
 	restarted := before.total("process_start_time_seconds", nil) != after.total("process_start_time_seconds", nil)
 	resources := resourceDelta(before, after, samples, window)
 	if afterDisk >= beforeDisk {
@@ -423,22 +423,22 @@ func resourceSample(s *snapshot, at float64) ResourceSample {
 		PanelMetrics: panelMetricSamples(s),
 		AtSeconds:    round(at, 3), CPUSeconds: s.total("process_cpu_seconds_total", nil),
 		RSSBytes: s.total("process_resident_memory_bytes", nil), HeapBytes: s.total("go_memstats_heap_alloc_bytes", nil),
-		QueueDepth: s.total("fanout_ingest_queue_depth", nil), ParquetFiles: s.total("fanout_parquet_files", nil),
-		ParquetBytes: s.total("fanout_parquet_size_bytes", nil), PublishWaiters: s.total("fanout_parquet_publish_waiters", nil),
-		PublishTimeouts:                s.total("fanout_parquet_publish_timeouts_total", nil),
-		IngestRowsTotal:                sampleTotalsByLabel(s, "fanout_ingest_rows_total", "signal"),
-		RollupSeconds:                  sampleTotalsByLabel(s, "fanout_rollup_component_duration_seconds_sum", "rollup"),
-		WriteGateHoldSeconds:           sampleTotalsByLabel(s, "fanout_write_gate_hold_seconds_sum", "operation"),
-		WriteGateWaitSeconds:           sampleTotalsByLabel(s, "fanout_write_gate_wait_seconds_sum", "operation"),
-		CompactionSecondsTotal:         s.total("fanout_telemetry_operation_duration_seconds_sum", map[string]string{"operation": "compaction"}),
-		CompactionsTotal:               s.total("fanout_telemetry_operation_duration_seconds_count", map[string]string{"operation": "compaction"}),
-		PublishWaitSecondsTotal:        s.total("fanout_parquet_publish_wait_seconds_sum", nil),
-		IngestBackpressureSecondsTotal: s.total("fanout_ingest_backpressure_seconds_total", nil),
-		IngestThrottledTotal:           sampleTotalsByLabel(s, "fanout_ingest_throttled_total", "reason"),
-		IngestAdmissionRowsPerSecond:   s.total("fanout_ingest_admission_rows_per_second", nil),
-		CompactionRetiredBatchesTotal:  s.total("fanout_compaction_retired_batches_total", nil),
-		CompactionPassSecondsTotal:     s.total("fanout_compaction_pass_seconds_sum", nil),
-		CompactionBacklogBatches:       s.total("fanout_compaction_backlog_batches", nil),
+		QueueDepth: s.total("pitot_ingest_queue_depth", nil), ParquetFiles: s.total("pitot_parquet_files", nil),
+		ParquetBytes: s.total("pitot_parquet_size_bytes", nil), PublishWaiters: s.total("pitot_parquet_publish_waiters", nil),
+		PublishTimeouts:                s.total("pitot_parquet_publish_timeouts_total", nil),
+		IngestRowsTotal:                sampleTotalsByLabel(s, "pitot_ingest_rows_total", "signal"),
+		RollupSeconds:                  sampleTotalsByLabel(s, "pitot_rollup_component_duration_seconds_sum", "rollup"),
+		WriteGateHoldSeconds:           sampleTotalsByLabel(s, "pitot_write_gate_hold_seconds_sum", "operation"),
+		WriteGateWaitSeconds:           sampleTotalsByLabel(s, "pitot_write_gate_wait_seconds_sum", "operation"),
+		CompactionSecondsTotal:         s.total("pitot_telemetry_operation_duration_seconds_sum", map[string]string{"operation": "compaction"}),
+		CompactionsTotal:               s.total("pitot_telemetry_operation_duration_seconds_count", map[string]string{"operation": "compaction"}),
+		PublishWaitSecondsTotal:        s.total("pitot_parquet_publish_wait_seconds_sum", nil),
+		IngestBackpressureSecondsTotal: s.total("pitot_ingest_backpressure_seconds_total", nil),
+		IngestThrottledTotal:           sampleTotalsByLabel(s, "pitot_ingest_throttled_total", "reason"),
+		IngestAdmissionRowsPerSecond:   s.total("pitot_ingest_admission_rows_per_second", nil),
+		CompactionRetiredBatchesTotal:  s.total("pitot_compaction_retired_batches_total", nil),
+		CompactionPassSecondsTotal:     s.total("pitot_compaction_pass_seconds_sum", nil),
+		CompactionBacklogBatches:       s.total("pitot_compaction_backlog_batches", nil),
 	}
 }
 
@@ -463,7 +463,7 @@ func sampleTotalsByLabel(s *snapshot, name, label string) map[string]float64 {
 func resourceDelta(before, after *snapshot, samples []ResourceSample, elapsed float64) Resources {
 	result := Resources{
 		EndRSSBytes: after.total("process_resident_memory_bytes", nil), EndHeapBytes: after.total("go_memstats_heap_alloc_bytes", nil),
-		ParquetFiles: after.total("fanout_parquet_files", nil), ParquetBytes: after.total("fanout_parquet_size_bytes", nil),
+		ParquetFiles: after.total("pitot_parquet_files", nil), ParquetBytes: after.total("pitot_parquet_size_bytes", nil),
 		AllocBytes:     after.total("go_memstats_alloc_bytes_total", nil) - before.total("go_memstats_alloc_bytes_total", nil),
 		GCPauseSeconds: after.total("go_gc_duration_seconds_sum", nil) - before.total("go_gc_duration_seconds_sum", nil),
 	}
@@ -485,16 +485,16 @@ func classify(t Trial, previous []Trial) (string, []string) {
 		notes = append(notes, "one or more telemetrygen processes failed")
 	}
 	if t.RowsDropped > 0 {
-		notes = append(notes, "Fanout reported dropped rows")
+		notes = append(notes, "Pitot reported dropped rows")
 	}
 	if t.ProcessRestarted {
-		notes = append(notes, "Fanout restarted during the trial")
+		notes = append(notes, "Pitot restarted during the trial")
 	}
 	if len(notes) > 0 {
 		return "invalid", notes
 	}
 	if t.Accepted.Total() == 0 {
-		return "invalid", []string{"Fanout accepted no telemetry"}
+		return "invalid", []string{"Pitot accepted no telemetry"}
 	}
 	if t.AcceptanceRatio >= .95 {
 		return "target-sustained", nil
@@ -627,7 +627,7 @@ func summarize(report Report, cooldownRSS, cooldownHeap float64) Summary {
 		{"generator-processes", genOK, generatorDetail},
 		{"server-dropped-rows", dropsOK, boolDetail(dropsOK, "zero", "non-zero")},
 		{"server-restarts", restartsOK, boolDetail(restartsOK, "none", "detected")},
-		{"authoritative-counters", dataOK, boolDetail(dataOK, "Fanout accepted rows in every phase", "a phase accepted no rows")},
+		{"authoritative-counters", dataOK, boolDetail(dataOK, "Pitot accepted rows in every phase", "a phase accepted no rows")},
 	}
 	if report.Settings.QueryRate > 0 {
 		queryOK := false
@@ -650,15 +650,15 @@ func summarize(report Report, cooldownRSS, cooldownHeap float64) Summary {
 		s.Passed = s.Passed && gate.Passed
 	}
 	s.Warnings = []string{
-		"Results describe this exact host, Fanout build, configuration, dataset, and workload; they are not universal capacity claims.",
+		"Results describe this exact host, Pitot build, configuration, dataset, and workload; they are not universal capacity claims.",
 		"telemetrygen payloads are intentionally synthetic and highly compressible; storage size is not representative of production telemetry.",
-		"Offered load is a target. Headline throughput uses Fanout's accepted-row counters, never telemetrygen's intended or generated count.",
+		"Offered load is a target. Headline throughput uses Pitot's accepted-row counters, never telemetrygen's intended or generated count.",
 	}
-	if strings.HasPrefix(report.Build.FanoutArtifact, UnreleasedArtifactPrefix) {
-		s.Warnings = append([]string{"Fanout " + report.Build.FanoutVersion + " is an unreleased local build without a verifiable release checksum. This run is diagnostic and must not be published."}, s.Warnings...)
+	if strings.HasPrefix(report.Build.PitotArtifact, UnreleasedArtifactPrefix) {
+		s.Warnings = append([]string{"Pitot " + report.Build.PitotVersion + " is an unreleased local build without a verifiable release checksum. This run is diagnostic and must not be published."}, s.Warnings...)
 	}
 	if report.Host.GeneratorLocal {
-		s.Warnings = append(s.Warnings, "Fanout and load generators shared one host; generator contention can make the observed peak lower than Fanout's backend ceiling.")
+		s.Warnings = append(s.Warnings, "Pitot and load generators shared one host; generator contention can make the observed peak lower than Pitot's backend ceiling.")
 	}
 	if report.Settings.QueryRate == 0 {
 		s.Warnings = append(s.Warnings, "This suite measured writes only. Configure query load to claim mixed read/write performance.")
@@ -675,7 +675,7 @@ func settingsFrom(c Config) Settings {
 		SampleInterval: c.SampleInterval, SampleSeconds: c.SampleInterval.Seconds(), GeneratorTimeout: c.GeneratorTimeout,
 		TimeoutSeconds: c.GeneratorTimeout.Seconds(), Cooldown: c.Cooldown, CooldownSeconds: c.Cooldown.Seconds(), DataDir: c.DataDir,
 		QueryURL: c.QueryURL, QueryRate: c.QueryRate, BatchSize: c.BatchSize, TraceChildSpans: 1,
-		Methodology: "Fanout server-side accepted-row counter deltas divided by measured wall time; telemetrygen emits one parent and one child span per trace tick. " +
+		Methodology: "Pitot server-side accepted-row counter deltas divided by measured wall time; telemetrygen emits one parent and one child span per trace tick. " +
 			"Split runs bracket each phase with generator-host /proc/stat reads over the generator SSH setup, including startup and export draining. " +
 			"Generator CPU cores = logical CPUs × (total tick delta − idle and iowait tick delta) / total tick delta; guest ticks are not counted twice. " +
 			"Invalid trials take precedence; accepting at least 95% of the target remains target-sustained. Otherwise generator CPU at or above 90% is generator-limited; " +
@@ -697,7 +697,7 @@ func workloadHash(settings Settings, plan []PhaseSpec) string {
 }
 
 func (r *Runner) buildManifest(ctx context.Context) Build {
-	b := Build{HarnessVersion: r.Version, HarnessCommit: "unknown", FanoutVersion: r.Config.FanoutVersion, FanoutCommit: r.Config.FanoutCommit, FanoutArtifact: r.Config.FanoutArtifact, TelemetrygenVersion: r.Config.TelemetrygenVersion}
+	b := Build{HarnessVersion: r.Version, HarnessCommit: "unknown", PitotVersion: r.Config.PitotVersion, PitotCommit: r.Config.PitotCommit, PitotArtifact: r.Config.PitotArtifact, TelemetrygenVersion: r.Config.TelemetrygenVersion}
 	if info, ok := debug.ReadBuildInfo(); ok {
 		for _, setting := range info.Settings {
 			switch setting.Key {

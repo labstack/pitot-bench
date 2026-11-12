@@ -36,7 +36,7 @@ func loadQueryTargets(ctx context.Context, client *http.Client, base, cookie str
 			return err
 		}
 		req.Header.Set("Cookie", cookie)
-		req.Header.Set("Fanout-Request", "1")
+		req.Header.Set("Pitot-Request", "1")
 		resp, err := client.Do(req)
 		if err != nil {
 			return err

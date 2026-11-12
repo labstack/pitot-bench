@@ -33,7 +33,7 @@ func TestManagedListenDerivesAllEndpointsAndPlacement(t *testing.T) {
 	// is independent of port reservation and works for private IPv4 and IPv6.
 	for _, addr := range []string{"10.77.0.2:12345", "[fd77::2]:12345"} {
 		for _, split := range []bool{false, true} {
-			managed := ManagedConfig{TelemetrygenPath: "/generator/telemetrygen", HostDescription: "Fanout ccx33", GeneratorHostDescription: "Generator ccx43"}
+			managed := ManagedConfig{TelemetrygenPath: "/generator/telemetrygen", HostDescription: "Pitot ccx33", GeneratorHostDescription: "Generator ccx43"}
 			if split {
 				managed.GeneratorSSH = "root@10.77.0.3"
 				managed.GeneratorSSHPort = 2222
@@ -53,9 +53,9 @@ func TestManagedListenDerivesAllEndpointsAndPlacement(t *testing.T) {
 	}
 }
 
-func TestFanoutEnvironmentUsesCurrentSchema(t *testing.T) {
-	// Schema env tags captured from internal/config/config.go at 870c90db.
-	schema, err := os.ReadFile("testdata/fanout-v2026.10.1-alpha-env.txt")
+func TestPitotEnvironmentUsesCurrentSchema(t *testing.T) {
+	// Schema env tags captured from internal/config/config.go at 9b392e7496b93372338a9ea9d3894bec24fd897d.
+	schema, err := os.ReadFile("testdata/pitot-v2026.11.5-alpha-env.txt")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,32 +64,35 @@ func TestFanoutEnvironmentUsesCurrentSchema(t *testing.T) {
 		knownNames[name] = true
 	}
 	want := map[string]string{
-		"FANOUT_ADDR":             "127.0.0.1:12345",
-		"FANOUT_DATA_DIR":         "/tmp/data",
-		"FANOUT_AUTH_CODE_SECRET": "auth-secret",
-		"FANOUT_METRICS_TOKEN":    "metrics-secret",
-		"FANOUT_METRICS_PUBLIC":   "false",
-		"FANOUT_MCP_ENABLED":      "false",
-		"FANOUT_ALERTS_ENABLED":   "false",
+		"PITOT_ADDR":             "127.0.0.1:12345",
+		"PITOT_DATA_DIR":         "/tmp/data",
+		"PITOT_AUTH_CODE_SECRET": "auth-secret",
+		"PITOT_METRICS_TOKEN":    "metrics-secret",
+		"PITOT_METRICS_PUBLIC":   "false",
+		"PITOT_MCP_ENABLED":      "false",
+		"PITOT_ALERTS_ENABLED":   "false",
 	}
-	parent := []string{"PATH=/bin", "FANOUT_HTTP_ADDR=:7520", "FANOUT_AI_PROVIDER=openai", "FANOUT_BENCH_QUERY_COOKIE=secret", "FANOUT_ADDR=:1", "FANOUT_DATA_DIR=old", "FANOUT_AUTH_CODE_SECRET_FILE=/secret", "FANOUT_METRICS_TOKEN_FILE=/secret"}
-	env := fanoutEnvironment(parent, "/tmp/data", "127.0.0.1:12345", "auth-secret", "metrics-secret")
+	parent := []string{"FANOUT_ADDR=:7520", "FANOUT_AUTH_CODE_SECRET_FILE=/retired-secret", "PATH=/bin", "PITOT_HTTP_ADDR=:7520", "PITOT_AI_PROVIDER=openai", "PITOT_BENCH_QUERY_COOKIE=secret", "PITOT_ADDR=:1", "PITOT_DATA_DIR=old", "PITOT_AUTH_CODE_SECRET_FILE=/secret", "PITOT_METRICS_TOKEN_FILE=/secret"}
+	env := pitotEnvironment(parent, "/tmp/data", "127.0.0.1:12345", "auth-secret", "metrics-secret")
 	seen := map[string]bool{}
 	for _, entry := range env {
 		name, value, _ := strings.Cut(entry, "=")
+		if strings.HasPrefix(name, "FANOUT_") {
+			t.Errorf("retired setting reached the product: %s", name)
+		}
 		if seen[name] {
 			t.Fatalf("duplicate setting %s", name)
 		}
 		seen[name] = true
-		if !strings.HasPrefix(name, "FANOUT_") {
+		if !strings.HasPrefix(name, "PITOT_") {
 			continue
 		}
 		if !knownNames[name] {
-			t.Errorf("unknown Fanout schema setting %s", name)
+			t.Errorf("unknown Pitot schema setting %s", name)
 		}
 		expected, known := want[name]
 		if !known {
-			t.Errorf("unknown or uncontrolled Fanout setting %s", name)
+			t.Errorf("unknown or uncontrolled Pitot setting %s", name)
 		} else if value != expected {
 			t.Errorf("%s=%q, want %q", name, value, expected)
 		}
@@ -100,7 +103,7 @@ func TestFanoutEnvironmentUsesCurrentSchema(t *testing.T) {
 		}
 	}
 	if !seen["PATH"] {
-		t.Error("lost non-Fanout environment")
+		t.Error("lost non-Pitot environment")
 	}
 }
 
@@ -110,17 +113,17 @@ func TestSetupRequiresIngestToken(t *testing.T) {
 			requests := 0
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				requests++
-				if r.URL.Path != "/api/auth/setup" || r.Method != http.MethodPost || r.Header.Get("Fanout-Request") != "1" {
+				if r.URL.Path != "/api/auth/setup" || r.Method != http.MethodPost || r.Header.Get("Pitot-Request") != "1" {
 					t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
 				}
 				var body map[string]string
 				if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 					t.Error(err)
 				}
-				if body["display_name"] != "Fanout Benchmark" || body["email"] != "benchmark@localhost" || body["setup_token"] != "setup-secret" {
+				if body["display_name"] != "Pitot Benchmark" || body["email"] != "benchmark@localhost" || body["setup_token"] != "setup-secret" {
 					t.Errorf("wrong setup shape: %v", body)
 				}
-				http.SetCookie(w, &http.Cookie{Name: "fanout_session", Value: "session-secret", Path: "/", HttpOnly: true})
+				http.SetCookie(w, &http.Cookie{Name: "pitot_session", Value: "session-secret", Path: "/", HttpOnly: true})
 				fmt.Fprint(w, response)
 			}))
 			defer server.Close()
@@ -144,7 +147,7 @@ func TestMetricsPathAndBearerAuthentication(t *testing.T) {
 			http.Error(w, "private", http.StatusUnauthorized)
 			return
 		}
-		fmt.Fprintln(w, `fanout_ingest_rows_total{signal="spans"} 42`)
+		fmt.Fprintln(w, `pitot_ingest_rows_total{signal="spans"} 42`)
 	}))
 	defer server.Close()
 	runner := Runner{Config: Config{MetricsURL: server.URL + "/metrics", MetricsToken: "metrics-secret"}, client: server.Client()}

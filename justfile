@@ -6,7 +6,7 @@ default: test
 
 build:
     mkdir -p bin
-    go build -trimpath -ldflags "-s -w -X main.version=$(git describe --always --dirty 2>/dev/null || echo dev)" -o bin/fanout-bench ./cmd/fanout-bench
+    go build -trimpath -ldflags "-s -w -X main.version=$(git describe --always --dirty 2>/dev/null || echo dev)" -o bin/pitot-bench ./cmd/pitot-bench
 
 [positional-arguments]
 hetzner *args:
@@ -21,5 +21,5 @@ test:
     go vet ./...
 
 smoke: build telemetrygen
-    ./bin/fanout-bench run --preset quick --telemetrygen ./bin/telemetrygen
+    ./bin/pitot-bench run --preset quick --telemetrygen ./bin/telemetrygen
 

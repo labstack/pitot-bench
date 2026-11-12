@@ -84,7 +84,7 @@ func queryPanelHTTP(ctx context.Context, client *http.Client, base, cookie, path
 		return nil, false, "missing"
 	}
 	req.Header.Set("Cookie", cookie)
-	req.Header.Set("Fanout-Request", "1")
+	req.Header.Set("Pitot-Request", "1")
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/x-ndjson")
 	resp, err := client.Do(req)
@@ -95,7 +95,7 @@ func queryPanelHTTP(ctx context.Context, client *http.Client, base, cookie, path
 	if resp.StatusCode != http.StatusOK {
 		status := "missing"
 		if resp.StatusCode == http.StatusServiceUnavailable {
-			// Only Fanout's explicit busy code attributes rejection to panels.
+			// Only Pitot's explicit busy code attributes rejection to panels.
 			var failure struct {
 				Code string `json:"code"`
 			}
@@ -240,8 +240,8 @@ func panelMetricSamples(s *snapshot) PanelMetrics {
 	}
 	for _, v := range s.samples {
 		switch v.name {
-		case "fanout_panel_query_duration_seconds_count", "fanout_panel_query_duration_seconds_sum",
-			"fanout_panel_admission_duration_seconds_count", "fanout_panel_admission_duration_seconds_sum":
+		case "pitot_panel_query_duration_seconds_count", "pitot_panel_query_duration_seconds_sum",
+			"pitot_panel_admission_duration_seconds_count", "pitot_panel_admission_duration_seconds_sum":
 		default:
 			continue
 		}
