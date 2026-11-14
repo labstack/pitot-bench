@@ -164,8 +164,10 @@ func (r *Runner) validate() error {
 		return errors.New("generator timeout must be positive")
 	case cfg.Repeat <= 0:
 		return errors.New("repeat must be positive")
-	case cfg.QueryRate < 0:
-		return errors.New("query rate cannot be negative")
+	case cfg.QueryRate < 0 || math.IsNaN(cfg.QueryRate) || math.IsInf(cfg.QueryRate, 0):
+		return errors.New("query rate must be finite and nonnegative")
+	case cfg.QueryRate > 0 && float64(time.Second)/cfg.QueryRate > float64(math.MaxInt64):
+		return errors.New("query interval exceeds the supported duration")
 	case cfg.QueryRate > 10_000:
 		return errors.New("query rate cannot exceed 10000 operations/s")
 	case cfg.QueryRate > 0 && strings.TrimSpace(cfg.QueryURL) == "":
@@ -214,6 +216,9 @@ func (r *Runner) runPhase(ctx context.Context, spec PhaseSpec, previous []Trial)
 	}
 
 	failures, processCount, runErr := r.runGenerators(ctx, spec)
+	if spec.QueryRate > 0 {
+		queries.stopScheduling()
+	}
 	elapsed := time.Since(started).Seconds()
 	if runErr != nil && ctx.Err() != nil {
 		cancel()
@@ -226,8 +231,8 @@ func (r *Runner) runPhase(ctx context.Context, spec PhaseSpec, previous []Trial)
 	// wait to a shorter interval and inflate the headline rate.
 	after, err := r.scrape(ctx)
 	// window is that scrape-to-scrape interval, and is the only honest
-	// denominator for the accepted delta. elapsed remains the offered-load
-	// duration and stays the denominator for completed queries.
+	// denominator for the accepted delta. elapsed retains the generator phase
+	// duration; read goodput uses its separately captured scheduling interval.
 	window := time.Since(started).Seconds()
 	cancel()
 	queries.finish()
@@ -276,10 +281,13 @@ func (r *Runner) runPhase(ctx context.Context, spec PhaseSpec, previous []Trial)
 		QueryShed:          queries.shed, QueryCanceled: queries.canceled,
 		Samples: samples,
 	}
+	if spec.QueryRate > 0 {
+		trial.Read = queries.readEvidence()
+	}
 	trial.Classification, trial.ClassificationNotes = classify(trial, previous)
 	r.readSummary = queries.operationSummary(spec.Name)
 	if trial.Spec.QueryRate > 0 && !queryTargetMet(trial) {
-		trial.ClassificationNotes = append(trial.ClassificationNotes, "the requested query rate was not sustained")
+		trial.ClassificationNotes = append(trial.ClassificationNotes, "read qualification goals were not met: "+strings.Join(readGateFailures(trial), "; "))
 	}
 	if runErr != nil {
 		trial.ClassificationNotes = append(trial.ClassificationNotes, redact(runErr.Error(), r.Config.Token, r.Config.QueryCookie, r.Config.MetricsToken))
@@ -542,7 +550,7 @@ func bestMixedTopology(trials []Trial) int {
 		}
 		completion := 1.0
 		if t.Spec.QueryRate > 0 && t.ElapsedSeconds > 0 {
-			completion = perSecond(float64(t.QueryLatency.Count), t.ElapsedSeconds) / t.Spec.QueryRate
+			completion = readCompletedRate(t) / t.Spec.QueryRate
 		}
 		if completion > fallbackCompletion || (completion == fallbackCompletion && t.AcceptedPerSecond > fallbackRate) {
 			fallbackCompletion, fallbackRate, fallbackProcesses = completion, t.AcceptedPerSecond, t.Spec.ProcessesPerSignal
@@ -561,14 +569,7 @@ func queryTargetMet(t Trial) bool {
 	if t.Spec.QueryRate <= 0 {
 		return true
 	}
-	if t.ElapsedSeconds <= 0 {
-		return false
-	}
-	if t.Spec.Kind == "sustained" && len(missingQueryKinds(t)) > 0 {
-		return false
-	}
-	completedRate := perSecond(float64(t.QueryLatency.Count), t.ElapsedSeconds)
-	return completedRate >= t.Spec.QueryRate*.95 && t.QueryFailures == 0 && t.QueryShed == 0
+	return len(readGateFailures(t)) == 0
 }
 
 func missingQueryKinds(t Trial) []string {
@@ -637,8 +638,17 @@ func summarize(report Report, cooldownRSS, cooldownHeap float64) Summary {
 				continue
 			}
 			queryOK = queryTargetMet(t)
-			completedRate := perSecond(float64(t.QueryLatency.Count), t.ElapsedSeconds)
+			if !readProfileMatches(report.Settings.ReadProfile) {
+				queryOK = false
+			}
+			completedRate := readCompletedRate(t)
 			detail = fmt.Sprintf("%.1f/%.1f completed/s, %d errors, %d shed", completedRate, t.Spec.QueryRate, t.QueryFailures, t.QueryShed)
+			if !readProfileMatches(report.Settings.ReadProfile) {
+				detail += "; declared read profile missing or differs from current qualification goals"
+			}
+			if failures := readGateFailures(t); len(failures) > 0 {
+				detail += "; " + strings.Join(failures, "; ")
+			}
 			if missing := missingQueryKinds(t); len(missing) > 0 {
 				detail += "; zero successful operations: " + strings.Join(missing, ", ")
 			}
@@ -671,7 +681,7 @@ func settingsFrom(c Config) Settings {
 	if c.Insecure {
 		transport = "plaintext gRPC"
 	}
-	return Settings{Signals: c.SignalSelection, EarlyStop: c.Preset == "validate", Preset: c.Preset, Endpoint: c.Endpoint, MetricsURL: c.MetricsURL, Transport: transport, Repeat: c.Repeat,
+	return Settings{ReadProfile: readProfileForRate(c.QueryRate), Signals: c.SignalSelection, EarlyStop: c.Preset == "validate", Preset: c.Preset, Endpoint: c.Endpoint, MetricsURL: c.MetricsURL, Transport: transport, Repeat: c.Repeat,
 		SampleInterval: c.SampleInterval, SampleSeconds: c.SampleInterval.Seconds(), GeneratorTimeout: c.GeneratorTimeout,
 		TimeoutSeconds: c.GeneratorTimeout.Seconds(), Cooldown: c.Cooldown, CooldownSeconds: c.Cooldown.Seconds(), DataDir: c.DataDir,
 		QueryURL: c.QueryURL, QueryRate: c.QueryRate, BatchSize: c.BatchSize, TraceChildSpans: 1,

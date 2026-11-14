@@ -11,7 +11,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 )
 
@@ -25,32 +24,39 @@ const (
 )
 
 type queryRun struct {
-	targets    []queryTarget
-	traceMu    sync.Mutex
-	traces     map[string]traceReference
-	selections map[string]drillSelection
-	kindsMu    sync.Mutex
-	kinds      map[string]*operationStats
-	panelsMu   sync.Mutex
-	panels     map[string]*panelStats
-	wg         sync.WaitGroup
-	hist       *histogram
-	failures   int64
-	attempts   int64
-	shed       int64
-	canceled   int64
-	stop       chan struct{}
-	stopOnce   sync.Once
-	cancel     context.CancelFunc
+	scheduleMu                                                  sync.Mutex
+	startedAt, cutoff                                           time.Time
+	rate                                                        float64
+	expected, missed, completedDuringLoad, completedDuringDrain int64
+	intended                                                    map[string]ReadIntended
+	endToEnd, queue                                             *histogram
+	targets                                                     []queryTarget
+	traceMu                                                     sync.Mutex
+	traces                                                      map[string]traceReference
+	selections                                                  map[string]drillSelection
+	kindsMu                                                     sync.Mutex
+	kinds                                                       map[string]*operationStats
+	panelsMu                                                    sync.Mutex
+	panels                                                      map[string]*panelStats
+	wg                                                          sync.WaitGroup
+	hist                                                        *histogram
+	failures                                                    int64
+	attempts                                                    int64
+	shed                                                        int64
+	canceled                                                    int64
+	stop                                                        chan struct{}
+	stopOnce                                                    sync.Once
+	cancel                                                      context.CancelFunc
 }
 
 type operationStats struct {
 	dispatched, failures, canceled int64
 	hist                           *histogram
+	endToEnd, queue                *histogram
 }
 
 func newQueryRun() *queryRun {
-	return &queryRun{targets: []queryTarget{{name: "dashboard-refresh", body: []byte(`{}`)}}, traces: map[string]traceReference{}, selections: map[string]drillSelection{}, kinds: map[string]*operationStats{}, panels: map[string]*panelStats{}, hist: newHistogram(), stop: make(chan struct{}), cancel: func() {}}
+	return &queryRun{targets: []queryTarget{{name: "dashboard-refresh", body: []byte(`{}`)}}, traces: map[string]traceReference{}, selections: map[string]drillSelection{}, kinds: map[string]*operationStats{}, panels: map[string]*panelStats{}, hist: newHistogram(), endToEnd: newHistogram(), queue: newHistogram(), intended: map[string]ReadIntended{}, stop: make(chan struct{}), cancel: func() {}}
 }
 
 func (q *queryRun) start(ctx context.Context, client *http.Client, base, cookie string, rate float64) {
@@ -69,15 +75,18 @@ func (q *queryRun) start(ctx context.Context, client *http.Client, base, cookie 
 	// busy and the queue is full. An unbuffered channel would also shed
 	// whenever no worker happened to be parked in its receive at that instant,
 	// which reports backpressure the server never caused.
-	jobs := make(chan int, workers)
+	jobs := make(chan readJob, workers)
 	runCtx, cancel := context.WithCancel(ctx)
 	q.cancel = cancel
+	q.scheduleMu.Lock()
+	q.startedAt, q.rate = time.Now(), rate
+	q.scheduleMu.Unlock()
 	q.wg.Add(workers + 1)
 	for worker := 0; worker < workers; worker++ {
 		go func() {
 			defer q.wg.Done()
-			for targetIndex := range jobs {
-				q.request(runCtx, client, base, cookie, targetIndex)
+			for job := range jobs {
+				q.requestJob(runCtx, client, base, cookie, job)
 			}
 		}()
 	}
@@ -86,21 +95,22 @@ func (q *queryRun) start(ctx context.Context, client *http.Client, base, cookie 
 		defer close(jobs)
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
-		targetIndex := 0
 		for {
 			select {
 			case <-runCtx.Done():
+				q.stopScheduling()
 				return
 			case <-q.stop:
 				return
 			case <-ticker.C:
-				atomic.AddInt64(&q.attempts, 1)
-				select {
-				case jobs <- targetIndex:
-					targetIndex++
-				default:
-					atomic.AddInt64(&q.shed, 1)
-				}
+				q.advanceSchedule(time.Now(), func(job readJob) bool {
+					select {
+					case jobs <- job:
+						return true
+					default:
+						return false
+					}
+				})
 			}
 		}
 	}()
@@ -111,36 +121,22 @@ func (q *queryRun) start(ctx context.Context, client *http.Client, base, cookie 
 // already being read, and those abort as read errors rather than transport
 // errors, which the trial would then count as server failures.
 func (q *queryRun) finish() {
-	q.stopOnce.Do(func() { close(q.stop) })
+	q.stopScheduling()
 	q.wg.Wait()
 	q.cancel()
 }
 
 func (q *queryRun) request(ctx context.Context, client *http.Client, base, cookie string, targetIndex int) {
-	query := q.targets[targetIndex%len(q.targets)]
+	q.requestJob(ctx, client, base, cookie, readJob{targetIndex: targetIndex, scheduledAt: time.Now(), intended: q.targets[targetIndex%len(q.targets)].name})
+}
+
+func (q *queryRun) requestJob(ctx context.Context, client *http.Client, base, cookie string, job readJob) {
+	query := q.targets[job.targetIndex%len(q.targets)]
 	kind := query.name
 	started := time.Now()
 	success := false
 	defer func() {
-		elapsed := time.Since(started)
-		q.kindsMu.Lock()
-		defer q.kindsMu.Unlock()
-		stats := q.kinds[kind]
-		if stats == nil {
-			stats = &operationStats{hist: newHistogram()}
-			q.kinds[kind] = stats
-		}
-		stats.dispatched++
-		if success {
-			q.hist.record(elapsed)
-			stats.hist.record(elapsed)
-		} else if ctx.Err() != nil {
-			atomic.AddInt64(&q.canceled, 1)
-			stats.canceled++
-		} else {
-			atomic.AddInt64(&q.failures, 1)
-			stats.failures++
-		}
+		q.recordOperation(job, kind, started, time.Now(), success, ctx.Err() != nil)
 	}()
 	refresh := func() bool {
 		body, ok, absent := queryPanelHTTP(ctx, client, base, cookie, queryRunPath, query.body)

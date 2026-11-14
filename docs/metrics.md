@@ -83,9 +83,34 @@ A report passes its evidence-quality gates when:
 3. the Pitot process start time does not change;
 4. Pitot's accepted-row counter advances in every phase.
 
-When read load is enabled, the sustained mixed phase must also complete at least 95% of the requested operation rate with zero operation failures and zero scheduler shedding. The report records operations canceled exactly at the phase boundary separately; they are not hidden as successful work.
+When read load is enabled, the sustained mixed phase must also complete at least 95% of the requested operation rate **during the offered-load interval**, with zero operation failures, cancellations, scheduler-missed arrivals and scheduler shedding. It must meet the per-kind HTTP completion profile below. The scheduler stops when generators finish, before the final metrics scrape. Already dispatched work drains normally; successes completed during drain are reported separately and do not increase during-load goodput.
 
-The read scheduler is open-loop and bounded. `query_attempts` counts scheduled operations, `query_latency_ms.count` counts valid completed operations, `query_shed` counts ticks rejected because the concurrency bound was full, and `query_canceled_at_phase_end` counts in-flight operations canceled when load stopped.
+The read scheduler is open-loop and bounded. `query_attempts` retains its delivered scheduling-attempt count; `query_latency_ms` retains successful HTTP service time from worker dequeue through the operation's last response. Both exclude arrivals missed by the scheduler; the latency also excludes its queue. `query_shed` counts delivered attempts rejected because the concurrency bound was full. `query_canceled_at_phase_end` retains its historical name and counts canceled dispatched work; ordinary phase completion drains rather than cancels it.
+
+New `read_evidence` accounts for offered arrival slots from monotonic elapsed time and requested rate, independently of ticker deliveries. On a delayed wake, skipped slots become `scheduler_missed`; they are never replayed as an unbounded catch-up burst. At shutdown, every remaining slot due through the captured cutoff is likewise accounted for. Per-kind intended counts include scheduler misses and sheds. Target rotation advances with offered slots, so overloaded or fallback work cannot silently change the reported intended mix. Performed-kind counts retain actual fallback attribution.
+
+After drain, the accounting identities are:
+
+```text
+scheduled = query_attempts + scheduler_missed
+scheduled = scheduler_missed + query_shed + dispatched
+dispatched = successful + failures + canceled
+successful = completed_during_load + completed_during_drain
+```
+
+`successful_arrival_to_completion_ms` measures scheduled arrival through final successful HTTP response, including scheduler queue delay. `dispatched_queue_ms` measures queue delay for every dispatched operation, including failures and cancellations. Success percentiles never include shed or failed work; outcome counts remain adjacent and use all offered arrivals as their denominator. `intended_operations` records requested kind, missed/shed/dispatched counts, outcomes and fallbacks; `performed_operations` records actual kind, outcomes and latency. These typed fields supplement the existing methodology tables.
+
+### Proposed HTTP completion profile
+
+`settings.read_profile` declares `interactive-http-draft/v1`, a versioned engineering goal rather than a measured product guarantee. It participates in the workload hash. New qualification requires matching profile metadata and arrival accounting; historical reports retain their original fields and recorded gates, and are labeled as legacy evidence without qualification against this profile.
+
+| Performed HTTP user operation | p95 goal | p99 goal |
+|---|---:|---:|
+| Complete dashboard batch and annotations | 1,500 ms | 3,000 ms |
+| Trace drill-down | 750 ms | 1,500 ms |
+| Bounded trace detail | 300 ms | 750 ms |
+
+Each kind needs at least 1,000 successful samples before its p99 can qualify. Fewer samples are **insufficient evidence**, not a pass. The same gate controls topology eligibility and sustained qualification. Consequently a standard 30-second sweep at 20 operations/s cannot supply enough samples per kind: topology selection uses the documented best-completion fallback, and only a sufficiently sampled sustained phase can qualify. These are HTTP operation completion goals; browser trigger-to-last-panel-paint measurements remain separate. The 500 ms individual-panel goal is not applied to an entire dashboard batch.
 
 ### Dashboard panel evidence
 

@@ -195,67 +195,46 @@ func TestRunPhaseStopsQueriesBeforeFinalGeneratorCPURead(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	var dispatched atomic.Int64
-	firstQuery := make(chan struct{}, 1)
-	scrapes := 0
+	var finalCPURead atomic.Bool
 	r := &Runner{
 		Config:       Config{GeneratorSSH: "unused", MetricsURL: "http://bench/metrics", QueryURL: "http://bench", SampleInterval: time.Hour},
 		queryTargets: newQueryRun().targets,
 		client: &http.Client{Transport: releaseTransport(func(req *http.Request) (*http.Response, error) {
 			body := `{"status":"empty"}`
 			if req.URL.Path == "/metrics" {
-				scrapes++
-				if scrapes == 2 {
-					// Keep the phase open until a query is in flight.
-					select {
-					case <-firstQuery:
-					case <-ctx.Done():
-						return nil, ctx.Err()
-					}
-				}
-				body = "pitot_rows_accepted_total{signal=\"logs\"} 1\n"
+				body = "pitot_ingest_rows_total{signal=\"logs\"} 1\n"
 			} else {
+				if finalCPURead.Load() {
+					t.Error("query dispatched after final generator CPU read began")
+				}
 				dispatched.Add(1)
-				select {
-				case firstQuery <- struct{}{}:
-				default:
-				}
-				select {
-				case <-time.After(20 * time.Millisecond):
-				case <-req.Context().Done():
-					return nil, req.Context().Err()
-				}
 			}
 			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
 		})},
 	}
 	cpuReads := 0
-	var beforeCPURead, afterCPURead int64
 	r.readGeneratorCPU = func(ctx context.Context) (cpuStat, error) {
 		cpuReads++
 		if cpuReads == 2 {
-			beforeCPURead = dispatched.Load()
-			select {
-			case <-time.After(100 * time.Millisecond):
-			case <-ctx.Done():
-				return cpuStat{}, ctx.Err()
-			}
-			afterCPURead = dispatched.Load()
+			finalCPURead.Store(true)
 		}
 		return cpuStat{total: uint64(cpuReads * 100), idle: uint64(cpuReads * 50), logicalCPUs: 1}, nil
 	}
-	// No generator processes are needed to exercise the phase boundary.
+	// A zero-generator phase ends immediately. Its final scrape must not keep
+	// the scheduler alive waiting for the first request, as the old test did.
+	// In-flight draining is exercised separately by the query-run tests.
 	trial, err := r.runPhase(ctx, PhaseSpec{Signal: Logs, QueryRate: 100}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cpuReads != 2 || beforeCPURead == 0 {
-		t.Fatalf("CPU reads=%d queries before final read=%d; workload was not exercised", cpuReads, beforeCPURead)
-	}
-	if afterCPURead != beforeCPURead {
-		t.Fatalf("queries dispatched during final CPU read: %d", afterCPURead-beforeCPURead)
+	if cpuReads != 2 {
+		t.Fatalf("CPU reads=%d", cpuReads)
 	}
 	if trial.QueryLatency.Count != dispatched.Load() || trial.QueryFailures != 0 || trial.QueryCanceled != 0 {
 		t.Fatalf("in-flight queries did not drain: dispatched=%d completed=%d failures=%d canceled=%d", dispatched.Load(), trial.QueryLatency.Count, trial.QueryFailures, trial.QueryCanceled)
+	}
+	if trial.Read == nil || trial.Read.Expected != trial.QueryAttempts+trial.Read.SchedulerMissed {
+		t.Fatalf("phase arrival accounting missing: %+v", trial.Read)
 	}
 }
 

@@ -109,6 +109,7 @@ type Build struct {
 }
 
 type Settings struct {
+	ReadProfile      *ReadProfile  `json:"read_profile,omitempty"`
 	Signals          string        `json:"signals,omitempty"`
 	EarlyStop        bool          `json:"early_stop,omitempty"`
 	Preset           string        `json:"preset"`
@@ -199,6 +200,7 @@ type GeneratorCPU struct {
 }
 
 type Trial struct {
+	Read                *ReadEvidence    `json:"read_evidence,omitempty"`
 	Spec                PhaseSpec        `json:"settings"`
 	StartedAt           time.Time        `json:"started_at"`
 	ElapsedSeconds      float64          `json:"elapsed_seconds"`
