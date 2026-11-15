@@ -11,6 +11,16 @@ releases, check out the harness revision recorded in that report. New reports us
 report formats are not accepted; use the harness revision recorded in the
 archived evidence to read them. No published measurement is rewritten.
 
+New read reports add scheduled-arrival accounting and the proposed
+`interactive-http-draft/v1` qualification goals. They retain historical HTTP
+service-time fields while reporting scheduler queue delay, arrival-to-completion
+p95/p99, intended/performed operations, and during-load versus drain completions
+separately. Each performed kind needs 1,000 successful samples for p99
+qualification; short sweeps therefore use the existing best-completion topology
+fallback. See [read measurement and goals](docs/metrics.md#proposed-http-completion-profile).
+Historical reports without this metadata are not qualified against the new
+goals. HTTP completion is separate from browser last-panel paint.
+
 Pitot Bench drives the official OpenTelemetry `telemetrygen` client, measures what Pitot actually accepts, samples the server throughout the run, and emits publication-ready JSON and Markdown. It is deliberately harder to fool than a one-line requests-per-second script.
 
 ## What the headline means

@@ -183,15 +183,16 @@ func Markdown(r Report) string {
 		fmt.Fprintf(&b, "- %s **%s:** %s\n", map[bool]string{true: "✅", false: "❌"}[gate.Passed], gate.Name, gate.Detail)
 	}
 	if r.Settings.QueryRate > 0 {
-		fmt.Fprintf(&b, "\n## Read-under-write latency\n\nThe mixed phases used a bounded open-loop scheduler targeting %.0f authenticated user operations/s across System overview dashboard refresh (batched panels and annotations), exemplar drill-down, and trace detail. Latency covers every request in an operation; operation kinds and their counts/latencies appear in the methodology.\n\n", r.Settings.QueryRate)
+		fmt.Fprintf(&b, "\n## Read-under-write latency\n\nThe mixed phases used a bounded open-loop scheduler targeting %.0f authenticated user operations/s across System overview dashboard refresh (batched panels and annotations), exemplar drill-down, and trace detail. The historical latency fields below measure successful HTTP service time across every request in an operation, excluding the scheduler queue. New arrival accounting is reported separately.\n\n", r.Settings.QueryRate)
 		fmt.Fprintf(&b, "| Phase | Target/s | Completed/s | Attempted | p50 | p95 | p99 | Errors | Shed | Canceled at end |\n|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|\n")
 		for _, t := range r.Trials {
 			if t.Spec.Signal != Mixed || t.Spec.QueryRate <= 0 {
 				continue
 			}
-			fmt.Fprintf(&b, "| %s | %.0f | %.1f | %s | %.1fms | %.1fms | %.1fms | %d | %d | %d |\n", t.Spec.Name, t.Spec.QueryRate, perSecond(float64(t.QueryLatency.Count), t.ElapsedSeconds), formatNumber(float64(t.QueryAttempts)), t.QueryLatency.P50Ms, t.QueryLatency.P95Ms, t.QueryLatency.P99Ms, t.QueryFailures, t.QueryShed, t.QueryCanceled)
+			fmt.Fprintf(&b, "| %s | %.0f | %.1f | %s | %.1fms | %.1fms | %.1fms | %d | %d | %d |\n", t.Spec.Name, t.Spec.QueryRate, readCompletedRate(t), formatNumber(float64(t.QueryAttempts)), t.QueryLatency.P50Ms, t.QueryLatency.P95Ms, t.QueryLatency.P99Ms, t.QueryFailures, t.QueryShed, t.QueryCanceled)
 		}
 		fmt.Fprintln(&b)
+		renderReadEvidence(&b, r)
 	}
 	renderDashboardPanels(&b, r.Trials)
 	fmt.Fprintf(&b, "\n## Methodology and limits\n\n%s\n\n", r.Settings.Methodology)

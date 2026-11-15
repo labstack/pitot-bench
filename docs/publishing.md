@@ -15,6 +15,8 @@ A performance number is useful only when another engineer can explain and reprod
 - [ ] signal-specific peak results and a sustained mixed result;
 - [ ] a separate read-under-write result when claiming interactive performance;
 - [ ] requested, completed, failed, and shed operation rates beside read latency;
+- [ ] scheduled arrivals, scheduler-missed slots, queue delay and successful arrival-to-completion p95/p99 by intended/performed operation kind; report during-load completions separately from drain;
+- [ ] the declared HTTP completion profile and at least 1,000 successful samples per performed kind before p99 qualification; insufficient samples never count as a pass;
 - [ ] all evidence-quality gates passing;
 - [ ] limitations stated next to the headline, not hidden in a footnote.
 
@@ -28,6 +30,8 @@ Lead with two numbers, not one:
 Then publish the separate span, log-record, and metric-point sweeps. They explain workload sensitivity and make peer comparisons possible. Low-level writer microbenchmarks can explain engineering progress, but they must be labeled as component measurements and never presented as end-to-end OTLP throughput.
 
 Use median values across repetitions for the headline and retain every raw repetition. Report variability; do not select only the fastest run.
+
+The sweep `--repeat` count does not repeat the final sustained phase. Use independent invocations when repeating sustained qualification. Current short sweeps are under-sampled for the HTTP p99 profile and therefore use the documented topology fallback; publish qualification only from a sustained phase passing the declared sample, goodput, outcome and latency gates. HTTP operation completion does not measure browser paint time. Older reports without arrival accounting/profile metadata remain historical evidence and cannot be relabeled as passing the current goals.
 
 ## Language
 
