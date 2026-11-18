@@ -104,6 +104,8 @@ func commonFlags(name string, args []string) (bench.Config, error) {
 	fs.IntVar(&cfg.WorkerOverride, "workers", 0, "override workers per telemetrygen process")
 	fs.Float64Var(&cfg.RateOverride, "rate", 0, "override items/s per telemetrygen worker")
 	fs.DurationVar(&cfg.DurationOverride, "duration", 0, "override every measurement duration (use for diagnostics)")
+	fs.DurationVar(&cfg.Prefill, "prefill", 0, "ingest-only mixed load run after warmup so measured phases start on a populated server")
+	fs.IntVar(&cfg.PrefillProcesses, "prefill-processes", 16, "process count per signal for the prefill phase")
 	if err := fs.Parse(args); err != nil {
 		return cfg, err
 	}
@@ -189,6 +191,8 @@ func managed(ctx context.Context, args []string) error {
 	fs.IntVar(&cfg.WorkerOverride, "workers", 0, "override workers per process")
 	fs.Float64Var(&cfg.RateOverride, "rate", 0, "override items per worker per second")
 	fs.DurationVar(&cfg.DurationOverride, "duration", 0, "override measurement duration")
+	fs.DurationVar(&cfg.Prefill, "prefill", 0, "ingest-only prefill duration")
+	fs.IntVar(&cfg.PrefillProcesses, "prefill-processes", 16, "prefill process count per signal")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}

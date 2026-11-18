@@ -2,6 +2,7 @@ package bench
 
 import (
 	"slices"
+	"strings"
 	"testing"
 	"time"
 )
@@ -179,5 +180,61 @@ func TestValidationUsesPublishShape(t *testing.T) {
 	cfg.Preset = "validate"
 	if !settingsFrom(cfg).EarlyStop {
 		t.Fatal("validate early stop disabled")
+	}
+}
+
+func TestPlanPrefillRunsAfterWarmupWithoutReads(t *testing.T) {
+	plan, err := Plan(Config{Preset: "publish", Repeat: 1, BatchSize: 1000, QueryRate: 20, SignalSelection: "mixed", Prefill: 10 * time.Minute, PrefillProcesses: 16})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p := plan[1]; p.Kind != "prefill" || p.Signal != Mixed || p.Duration != 10*time.Minute || p.ProcessesPerSignal != 16 || p.QueryRate != 0 {
+		t.Fatalf("prefill phase: %+v", p)
+	}
+	if _, err := Plan(Config{Preset: "quick", Repeat: 1, BatchSize: 1000, Prefill: time.Minute}); err == nil {
+		t.Fatal("prefill without processes accepted")
+	}
+	if _, err := Plan(Config{Preset: "quick", Repeat: 1, BatchSize: 1000, Prefill: -time.Minute, PrefillProcesses: 1}); err == nil {
+		t.Fatal("negative prefill accepted")
+	}
+	off := settingsFrom(Config{Preset: "publish", PrefillProcesses: 16})
+	on := settingsFrom(Config{Preset: "publish", Prefill: time.Minute, PrefillProcesses: 16})
+	if off.PrefillProcesses != 0 || workloadHash(off, nil) == workloadHash(on, nil) {
+		t.Fatalf("prefill missing from workload identity: %+v %+v", off, on)
+	}
+	cfg := Config{Host: "root@h", Preset: "publish", Prefill: time.Minute, PrefillProcesses: 16}
+	if cmd := managedRemoteCommand("/s", cfg, "v", "a"); !strings.Contains(cmd, "'--prefill' '1m0s' '--prefill-processes' '16'") {
+		t.Fatalf("remote command: %s", cmd)
+	}
+	if cmd := reproductionRunCommand(cfg); !strings.Contains(cmd, "--prefill 1m0s --prefill-processes 16") {
+		t.Fatalf("reproduction: %s", cmd)
+	}
+	if got := managedRunnerConfig(ManagedConfig{Prefill: time.Minute, PrefillProcesses: 16}, "h:1", "d"); got.Prefill != time.Minute || got.PrefillProcesses != 16 {
+		t.Fatalf("managed config: %+v", got)
+	}
+}
+
+func TestSummarizeGatesPrefillSettling(t *testing.T) {
+	trial := func(kind string, unsettled bool) Trial {
+		return Trial{Spec: PhaseSpec{Name: kind, Kind: kind, Signal: Mixed}, Accepted: Counts{Spans: 100}, Unsettled: unsettled}
+	}
+	for _, unsettled := range []bool{false, true} {
+		report := Report{Trials: []Trial{trial("prefill", unsettled), trial("sustained", false)}}
+		s := summarize(report, 0, 0)
+		if s.Accepted.Spans != 100 {
+			t.Fatalf("prefill rows counted in totals: %v", s.Accepted.Spans)
+		}
+		var found bool
+		for _, g := range s.Gates {
+			if g.Name == "prefill-settled" {
+				found = true
+				if g.Passed == unsettled {
+					t.Fatalf("gate %+v for unsettled=%v", g, unsettled)
+				}
+			}
+		}
+		if !found || s.Passed == unsettled {
+			t.Fatalf("unsettled=%v passed=%v found=%v", unsettled, s.Passed, found)
+		}
 	}
 }

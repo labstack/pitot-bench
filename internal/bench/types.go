@@ -56,6 +56,8 @@ type Config struct {
 	WorkerOverride           int
 	RateOverride             float64
 	DurationOverride         time.Duration
+	Prefill                  time.Duration
+	PrefillProcesses         int
 	BatchSize                int
 	TelemetrygenVersion      string
 }
@@ -126,6 +128,8 @@ type Settings struct {
 	DataDir          string        `json:"data_dir,omitempty"`
 	QueryURL         string        `json:"query_url,omitempty"`
 	QueryRate        float64       `json:"query_rate,omitempty"`
+	PrefillSeconds   float64       `json:"prefill_seconds,omitempty"`
+	PrefillProcesses int           `json:"prefill_processes,omitempty"`
 	BatchSize        int           `json:"batch_size"`
 	TraceChildSpans  int           `json:"trace_child_spans"`
 	Methodology      string        `json:"methodology"`
@@ -200,6 +204,8 @@ type GeneratorCPU struct {
 }
 
 type Trial struct {
+	SettleSeconds       float64          `json:"settle_seconds,omitempty"`
+	Unsettled           bool             `json:"unsettled,omitempty"`
 	Read                *ReadEvidence    `json:"read_evidence,omitempty"`
 	Spec                PhaseSpec        `json:"settings"`
 	StartedAt           time.Time        `json:"started_at"`

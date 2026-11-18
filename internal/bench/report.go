@@ -251,6 +251,7 @@ func reproductionRunCommand(c Config) string {
 		if c.DurationOverride > 0 {
 			parts = append(parts, "--duration "+c.DurationOverride.String())
 		}
+		parts = append(parts, prefillArgs(c)...)
 		return strings.Join(parts, " ")
 	}
 	env := []string{"PITOT_BENCH_INGEST_TOKEN=…"}
@@ -271,7 +272,15 @@ func reproductionRunCommand(c Config) string {
 		env = append(env, "PITOT_BENCH_QUERY_COOKIE=…")
 		parts = append(parts, "--query-url "+shellQuote(c.QueryURL), "--query-rate "+fmt.Sprint(c.QueryRate))
 	}
+	parts = append(parts, prefillArgs(c)...)
 	return strings.Join(append(env, parts...), " ")
+}
+
+func prefillArgs(c Config) []string {
+	if c.Prefill <= 0 {
+		return nil
+	}
+	return []string{"--prefill " + c.Prefill.String(), "--prefill-processes " + fmt.Sprint(c.PrefillProcesses)}
 }
 
 func shellQuote(v string) string { return "'" + strings.ReplaceAll(v, "'", "'\\''") + "'" }
@@ -281,6 +290,9 @@ func phaseIcon(kind string) string {
 	}
 	if kind == "sustained" {
 		return "◆"
+	}
+	if kind == "prefill" {
+		return "▪"
 	}
 	return "◇"
 }

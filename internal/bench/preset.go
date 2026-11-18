@@ -67,6 +67,18 @@ func Plan(cfg Config) ([]PhaseSpec, error) {
 		}
 	}
 	phases := []PhaseSpec{makePhase("warmup", "warmup", Mixed, s.warmup, 1, 1)}
+	if cfg.Prefill < 0 {
+		return nil, fmt.Errorf("prefill must not be negative")
+	}
+	if cfg.Prefill > 0 {
+		if cfg.PrefillProcesses <= 0 {
+			return nil, fmt.Errorf("prefill processes must be positive")
+		}
+		// Read cost scales with retained data, so a read gate measured on a
+		// nearly empty server is optimistic. Prefill populates the store
+		// without read load before any measured phase.
+		phases = append(phases, makePhase("prefill", "prefill", Mixed, cfg.Prefill, cfg.PrefillProcesses, 1))
+	}
 	for repetition := 1; repetition <= cfg.Repeat; repetition++ {
 		for _, signal := range Signals {
 			if cfg.SignalSelection == "mixed" {
