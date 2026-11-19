@@ -102,9 +102,10 @@ func (r *Runner) Run(ctx context.Context) (*Report, error) {
 			return r.abandon(report, fmt.Errorf("phase %s: %w", spec.Name, err))
 		}
 		if spec.Kind == "prefill" {
-			trial.SettleSeconds, trial.Unsettled = r.settle(ctx)
+			limit := max(settleLimit, spec.Duration)
+			trial.SettleSeconds, trial.Unsettled = r.settle(ctx, limit)
 			if trial.Unsettled {
-				trial.ClassificationNotes = append(trial.ClassificationNotes, fmt.Sprintf("server backlog did not drain within %s after prefill", settleLimit))
+				trial.ClassificationNotes = append(trial.ClassificationNotes, fmt.Sprintf("server backlog did not drain within %s after prefill", limit))
 			}
 			fmt.Fprintf(r.Out, "     settled in %.0fs (unsettled=%v)\n", trial.SettleSeconds, trial.Unsettled)
 		}
@@ -888,8 +889,10 @@ func prefillProcesses(c Config) int {
 	return c.PrefillProcesses
 }
 
-// settleLimit bounds the post-prefill wait. A server that cannot drain its
-// backlog in this time would carry prefill work into every measured phase.
+// settleLimit is the shortest post-prefill wait. The wait may last as long as
+// the prefill itself: a fast prefill compresses hours of ingest, and a server
+// that cannot drain the resulting backlog in that time would carry prefill
+// work into every measured phase.
 var settleLimit, settlePoll = 10 * time.Minute, 5 * time.Second
 
 // settle waits until the ingest queue, rollup catch-up backlog and read-cache
@@ -897,10 +900,10 @@ var settleLimit, settlePoll = 10 * time.Minute, 5 * time.Second
 // measured phases do not inherit prefill work. Reads of uncached batches scan
 // raw Parquet, so a lagging read cache would make measured reads pessimistic. An absent gauge never counts as drained. Compaction backlog is
 // not a condition: it includes underfilled groups and need not reach zero.
-func (r *Runner) settle(ctx context.Context) (float64, bool) {
+func (r *Runner) settle(ctx context.Context, limit time.Duration) (float64, bool) {
 	started := time.Now()
 	clean := 0
-	for time.Since(started) < settleLimit {
+	for time.Since(started) < limit {
 		if snap, err := r.scrape(ctx); err == nil && drained(snap, "pitot_ingest_queue_depth") && drained(snap, "pitot_rollup_backlog_chunks") && drained(snap, "pitot_read_cache_pending_batches") {
 			clean++
 			if clean == 2 {

@@ -34,7 +34,7 @@ func TestSettleRequiresTwoCleanScrapesOfExportedGauges(t *testing.T) {
 			}))
 			defer srv.Close()
 			r := &Runner{Config: Config{MetricsURL: srv.URL}, client: srv.Client()}
-			_, unsettled := r.settle(context.Background())
+			_, unsettled := r.settle(context.Background(), settleLimit)
 			if unsettled != tc.unsettled {
 				t.Fatalf("unsettled=%v", unsettled)
 			}
@@ -46,7 +46,7 @@ func TestSettleRequiresTwoCleanScrapesOfExportedGauges(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	r := &Runner{Config: Config{MetricsURL: "http://127.0.0.1:1"}, client: http.DefaultClient}
-	if _, unsettled := r.settle(ctx); !unsettled {
+	if _, unsettled := r.settle(ctx, settleLimit); !unsettled {
 		t.Fatal("canceled settle reported settled")
 	}
 }
