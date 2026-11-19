@@ -12,7 +12,7 @@ import (
 func TestSettleRequiresTwoCleanScrapesOfExportedGauges(t *testing.T) {
 	defer func(limit, poll time.Duration) { settleLimit, settlePoll = limit, poll }(settleLimit, settlePoll)
 	settleLimit, settlePoll = 2*time.Second, time.Millisecond
-	drainedBody := "pitot_ingest_queue_depth{signal=\"spans\"} 0\npitot_rollup_backlog_chunks{rollup=\"service\"} 0\n"
+	drainedBody := "pitot_ingest_queue_depth{signal=\"spans\"} 0\npitot_rollup_backlog_chunks{rollup=\"service\"} 0\npitot_read_cache_pending_batches 0\n"
 	for _, tc := range []struct {
 		name      string
 		bodies    []string
@@ -20,6 +20,7 @@ func TestSettleRequiresTwoCleanScrapesOfExportedGauges(t *testing.T) {
 		scrapes   int64
 	}{
 		{"drains after backlog", []string{"pitot_ingest_queue_depth{signal=\"spans\"} 3\npitot_rollup_backlog_chunks{rollup=\"service\"} 0\n", drainedBody, "pitot_rollup_backlog_chunks{rollup=\"service\"} 1\npitot_ingest_queue_depth{signal=\"spans\"} 0\n", drainedBody, drainedBody}, false, 5},
+		{"read cache lags", []string{"pitot_ingest_queue_depth{signal=\"spans\"} 0\npitot_rollup_backlog_chunks{rollup=\"service\"} 0\npitot_read_cache_pending_batches 7\n"}, true, 0},
 		{"absent gauge never drains", []string{"pitot_ingest_queue_depth{signal=\"spans\"} 0\n"}, true, 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

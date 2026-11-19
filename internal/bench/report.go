@@ -199,7 +199,7 @@ func Markdown(r Report) string {
 	for _, warning := range r.Summary.Warnings {
 		fmt.Fprintf(&b, "- %s\n", warning)
 	}
-	fmt.Fprintf(&b, "\n## Reproduce\n\n```sh\n%s\n```\n\nRaw evidence: `report.json` (authoritative structured report) and `samples.jsonl` (time-series resource samples, including cumulative `ingest_rows_total` by signal (`spans`, `logs`, `metrics`), `rollup_seconds`, `write_gate_hold_seconds`, `write_gate_wait_seconds`, `compaction_seconds_total`, `compactions_total`, `publish_wait_seconds_total`, `ingest_backpressure_seconds_total`, `ingest_throttled_total`, `ingest_admission_rows_per_second`, `compaction_retired_batches_total`, and `compaction_pass_seconds_total`, plus the current `compaction_backlog_batches` gauge when available).\n", r.ReproductionCommand)
+	fmt.Fprintf(&b, "\n## Reproduce\n\n```sh\n%s\n```\n\nRaw evidence: `report.json` (authoritative structured report) and `samples.jsonl` (time-series resource samples, including cumulative `ingest_rows_total` by signal (`spans`, `logs`, `metrics`), `rollup_seconds`, `write_gate_hold_seconds`, `write_gate_wait_seconds`, `compaction_seconds_total`, `compactions_total`, `publish_wait_seconds_total`, `ingest_backpressure_seconds_total`, `ingest_throttled_total`, `ingest_admission_rows_per_second`, `compaction_retired_batches_total`, and `compaction_pass_seconds_total`, plus the current `compaction_backlog_batches` and `read_cache_pending_batches` gauges and cumulative `rollup_rows` by rollup when available).\n", r.ReproductionCommand)
 	return b.String()
 }
 

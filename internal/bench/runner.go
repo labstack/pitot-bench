@@ -457,6 +457,8 @@ func resourceSample(s *snapshot, at float64) ResourceSample {
 		CompactionRetiredBatchesTotal:  s.total("pitot_compaction_retired_batches_total", nil),
 		CompactionPassSecondsTotal:     s.total("pitot_compaction_pass_seconds_sum", nil),
 		CompactionBacklogBatches:       s.total("pitot_compaction_backlog_batches", nil),
+		ReadCachePendingBatches:        s.total("pitot_read_cache_pending_batches", nil),
+		RollupRows:                     sampleTotalsByLabel(s, "pitot_rollup_component_rows_total", "rollup"),
 	}
 }
 
@@ -890,15 +892,16 @@ func prefillProcesses(c Config) int {
 // backlog in this time would carry prefill work into every measured phase.
 var settleLimit, settlePoll = 10 * time.Minute, 5 * time.Second
 
-// settle waits until the ingest queue and rollup catch-up backlog are exported
-// and empty in two consecutive scrapes, so measured phases do not inherit
-// prefill work. An absent gauge never counts as drained. Compaction backlog is
+// settle waits until the ingest queue, rollup catch-up backlog and read-cache
+// pending batches are exported and empty in two consecutive scrapes, so
+// measured phases do not inherit prefill work. Reads of uncached batches scan
+// raw Parquet, so a lagging read cache would make measured reads pessimistic. An absent gauge never counts as drained. Compaction backlog is
 // not a condition: it includes underfilled groups and need not reach zero.
 func (r *Runner) settle(ctx context.Context) (float64, bool) {
 	started := time.Now()
 	clean := 0
 	for time.Since(started) < settleLimit {
-		if snap, err := r.scrape(ctx); err == nil && drained(snap, "pitot_ingest_queue_depth") && drained(snap, "pitot_rollup_backlog_chunks") {
+		if snap, err := r.scrape(ctx); err == nil && drained(snap, "pitot_ingest_queue_depth") && drained(snap, "pitot_rollup_backlog_chunks") && drained(snap, "pitot_read_cache_pending_batches") {
 			clean++
 			if clean == 2 {
 				return round(time.Since(started).Seconds(), 1), false

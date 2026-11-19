@@ -167,6 +167,8 @@ type ResourceSample struct {
 	CompactionRetiredBatchesTotal  float64            `json:"compaction_retired_batches_total,omitempty"`
 	CompactionPassSecondsTotal     float64            `json:"compaction_pass_seconds_total,omitempty"`
 	CompactionBacklogBatches       float64            `json:"compaction_backlog_batches,omitempty"`
+	ReadCachePendingBatches        float64            `json:"read_cache_pending_batches,omitempty"`
+	RollupRows                     map[string]float64 `json:"rollup_rows,omitempty"`
 }
 
 type Latency struct {
