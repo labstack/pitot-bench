@@ -531,7 +531,7 @@ func managedRemoteCommand(stage string, cfg Config, version, artifact string) st
 	args = append(args, "--telemetrygen-version", cfg.TelemetrygenVersion)
 	args = append(args, "--provisioned-host", redactedHost(cfg.Host), "--host-description", cfg.HostDescription)
 	args = append(args, "--provisioned-ssh-port", fmt.Sprint(cfg.SSHPort), "--provisioned-ssh-identity", cfg.SSHIdentity)
-	args = append(args, "--processes", fmt.Sprint(cfg.ProcessOverride), "--workers", fmt.Sprint(cfg.WorkerOverride), "--rate", fmt.Sprint(cfg.RateOverride), "--duration", cfg.DurationOverride.String(), "--prefill", cfg.Prefill.String(), "--prefill-processes", fmt.Sprint(cfg.PrefillProcesses))
+	args = append(args, "--processes", fmt.Sprint(cfg.ProcessOverride), "--workers", fmt.Sprint(cfg.WorkerOverride), "--rate", fmt.Sprint(cfg.RateOverride), "--duration", cfg.DurationOverride.String(), "--prefill", cfg.Prefill.String(), "--prefill-processes", fmt.Sprint(cfg.PrefillProcesses), "--sustained-rate", fmt.Sprint(cfg.SustainedRate))
 	binaries := []string{stage + "/pitot-bench", stage + "/pitot"}
 	prefix := ""
 	if cfg.GeneratorHost == "" {

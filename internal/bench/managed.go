@@ -55,6 +55,7 @@ type ManagedConfig struct {
 	DurationOverride         time.Duration
 	Prefill                  time.Duration
 	PrefillProcesses         int
+	SustainedRate            float64
 }
 
 var setupTokenPattern = regexp.MustCompile(`setup_token=([^\s]+)`)
@@ -257,7 +258,7 @@ func managedRunnerConfig(managed ManagedConfig, httpAddr, dataDir string) Config
 		QueryRate: managed.QueryRate, SameHost: managed.GeneratorSSH == "", TelemetrygenVersion: managed.TelemetrygenVersion,
 		ProcessOverride: managed.ProcessOverride, WorkerOverride: managed.WorkerOverride,
 		RateOverride: managed.RateOverride, DurationOverride: managed.DurationOverride,
-		Prefill: managed.Prefill, PrefillProcesses: managed.PrefillProcesses,
+		Prefill: managed.Prefill, PrefillProcesses: managed.PrefillProcesses, SustainedRate: managed.SustainedRate,
 	}
 	cfg.GeneratorSSH = managed.GeneratorSSH
 	cfg.GeneratorSSHPort = managed.GeneratorSSHPort

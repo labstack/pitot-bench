@@ -116,6 +116,8 @@ The default topology is 8 workers per process at 2,500 items/s per worker with 1
 
 Read cost grows with retained data, so reads measured against a nearly empty server are optimistic. `--prefill 10m` runs an ingest-only mixed phase after warmup at `--prefill-processes` per signal (default 16, using the preset's workers and rate). The runner then waits for the exported ingest queue, rollup backlog and read-cache pending-batch gauges to read zero in two consecutive scrapes, for up to the prefill duration and at least 10 minutes, since a fast prefill compresses hours of ingest. Prefill rows are excluded from totals, peaks and topology selection. The `prefill-settled` gate fails when the backlog does not drain or the gauges are missing.
 
+The sustained phase normally reuses the mixed sweep topology with the highest accepted throughput, which can leave the host saturated. `--sustained-rate 48000` instead offers a fixed mixed rate (one process per signal, the per-worker rate scaled to match), so reads are measured at a stated ingest load.
+
 For publication runs, dedicate the default ccx33 to Pitot and use the separate ccx33 for generators, with three repetitions. Run ingest-only and read-under-write as two groups sharing the same fresh pair of VMs; see [the publication commands](docs/publishing.md#publication-runs). For example:
 
 ```sh

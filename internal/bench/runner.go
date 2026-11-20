@@ -708,7 +708,7 @@ func settingsFrom(c Config) Settings {
 		SampleInterval: c.SampleInterval, SampleSeconds: c.SampleInterval.Seconds(), GeneratorTimeout: c.GeneratorTimeout,
 		TimeoutSeconds: c.GeneratorTimeout.Seconds(), Cooldown: c.Cooldown, CooldownSeconds: c.Cooldown.Seconds(), DataDir: c.DataDir,
 		QueryURL: c.QueryURL, QueryRate: c.QueryRate, BatchSize: c.BatchSize, TraceChildSpans: 1,
-		PrefillSeconds: c.Prefill.Seconds(), PrefillProcesses: prefillProcesses(c),
+		PrefillSeconds: c.Prefill.Seconds(), PrefillProcesses: prefillProcesses(c), SustainedRate: c.SustainedRate,
 		Methodology: "Pitot server-side accepted-row counter deltas divided by measured wall time; telemetrygen emits one parent and one child span per trace tick. " +
 			"Split runs bracket each phase with generator-host /proc/stat reads over the generator SSH setup, including startup and export draining. " +
 			"Generator CPU cores = logical CPUs × (total tick delta − idle and iowait tick delta) / total tick delta; guest ticks are not counted twice. " +

@@ -252,6 +252,9 @@ func reproductionRunCommand(c Config) string {
 			parts = append(parts, "--duration "+c.DurationOverride.String())
 		}
 		parts = append(parts, prefillArgs(c)...)
+		if c.SustainedRate > 0 {
+			parts = append(parts, "--sustained-rate "+fmt.Sprint(c.SustainedRate))
+		}
 		return strings.Join(parts, " ")
 	}
 	env := []string{"PITOT_BENCH_INGEST_TOKEN=…"}

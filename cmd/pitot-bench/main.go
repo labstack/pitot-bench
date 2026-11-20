@@ -106,6 +106,7 @@ func commonFlags(name string, args []string) (bench.Config, error) {
 	fs.DurationVar(&cfg.DurationOverride, "duration", 0, "override every measurement duration (use for diagnostics)")
 	fs.DurationVar(&cfg.Prefill, "prefill", 0, "ingest-only mixed load run after warmup so measured phases start on a populated server")
 	fs.IntVar(&cfg.PrefillProcesses, "prefill-processes", 16, "process count per signal for the prefill phase")
+	fs.Float64Var(&cfg.SustainedRate, "sustained-rate", 0, "fixed offered mixed items/s for the sustained phase instead of the best sweep topology")
 	if err := fs.Parse(args); err != nil {
 		return cfg, err
 	}
@@ -193,6 +194,7 @@ func managed(ctx context.Context, args []string) error {
 	fs.DurationVar(&cfg.DurationOverride, "duration", 0, "override measurement duration")
 	fs.DurationVar(&cfg.Prefill, "prefill", 0, "ingest-only prefill duration")
 	fs.IntVar(&cfg.PrefillProcesses, "prefill-processes", 16, "prefill process count per signal")
+	fs.Float64Var(&cfg.SustainedRate, "sustained-rate", 0, "fixed offered mixed items/s for the sustained phase")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}

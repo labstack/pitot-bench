@@ -100,6 +100,15 @@ func Plan(cfg Config) ([]PhaseSpec, error) {
 	// mixed throughput from the sweep, then prove it over a longer window.
 	sustained := makePhase("mixed-sustained", "sustained", Mixed, s.sustain, 0, 1)
 	sustained.QueryRate = cfg.QueryRate
+	if cfg.SustainedRate < 0 {
+		return nil, fmt.Errorf("sustained rate must not be negative")
+	}
+	if cfg.SustainedRate > 0 {
+		// A fixed target rate measures reads at a stated ingest load rather
+		// than at whatever the sweep found the host could absorb.
+		sustained.ProcessesPerSignal = 1
+		sustained.RatePerWorker = cfg.SustainedRate / float64(len(Signals)*s.workers)
+	}
 	phases = append(phases, sustained)
 	return phases, nil
 }

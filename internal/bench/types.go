@@ -58,6 +58,7 @@ type Config struct {
 	DurationOverride         time.Duration
 	Prefill                  time.Duration
 	PrefillProcesses         int
+	SustainedRate            float64
 	BatchSize                int
 	TelemetrygenVersion      string
 }
@@ -130,6 +131,7 @@ type Settings struct {
 	QueryRate        float64       `json:"query_rate,omitempty"`
 	PrefillSeconds   float64       `json:"prefill_seconds,omitempty"`
 	PrefillProcesses int           `json:"prefill_processes,omitempty"`
+	SustainedRate    float64       `json:"sustained_rate,omitempty"`
 	BatchSize        int           `json:"batch_size"`
 	TraceChildSpans  int           `json:"trace_child_spans"`
 	Methodology      string        `json:"methodology"`

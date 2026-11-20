@@ -94,6 +94,20 @@ func TestOverridesProduceOneDiagnosticTopology(t *testing.T) {
 	}
 }
 
+func TestSustainedRatePinsTheSustainedPhase(t *testing.T) {
+	plan, err := Plan(Config{Preset: "publish", Repeat: 1, BatchSize: 1000, QueryRate: 20, SustainedRate: 48000})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := plan[len(plan)-1]
+	if p.Kind != "sustained" || p.ProcessesPerSignal != 1 || p.OfferedPerSecond() != 48000 || p.QueryRate != 20 {
+		t.Fatalf("sustained phase not pinned: %+v offered=%v", p, p.OfferedPerSecond())
+	}
+	if _, err := Plan(Config{Preset: "publish", Repeat: 1, BatchSize: 1000, SustainedRate: -1}); err == nil {
+		t.Fatal("negative sustained rate accepted")
+	}
+}
+
 func TestLocalPlanKeepsPublishShapeOnUpperSweepPoints(t *testing.T) {
 	plan, err := Plan(Config{Preset: "local", Repeat: 1, BatchSize: 1000})
 	if err != nil {
