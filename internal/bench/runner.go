@@ -96,10 +96,25 @@ func (r *Runner) Run(ctx context.Context) (*Report, error) {
 			spec.ProcessesPerSignal = best
 			plan[i] = spec
 		}
+		// The sweep's overload points leave rollup and read-cache backlog
+		// behind; the sustained phase measures steady state, so it starts only
+		// once that backlog has drained.
+		var preSettle float64
+		var preUnsettled bool
+		if spec.Kind == "sustained" {
+			preSettle, preUnsettled = r.settle(ctx, settleLimit)
+			fmt.Fprintf(r.Out, "\n     settled in %.0fs before sustained (unsettled=%v)", preSettle, preUnsettled)
+		}
 		fmt.Fprintf(r.Out, "\n  %s  %-18s offered %s items/s for %s\n", phaseIcon(spec.Kind), spec.Name, formatNumber(spec.OfferedPerSecond()), spec.Duration)
 		trial, err := r.runPhase(ctx, spec, report.Trials)
 		if err != nil {
 			return r.abandon(report, fmt.Errorf("phase %s: %w", spec.Name, err))
+		}
+		if spec.Kind == "sustained" {
+			trial.SettleSeconds, trial.Unsettled = preSettle, preUnsettled
+			if preUnsettled {
+				trial.ClassificationNotes = append(trial.ClassificationNotes, fmt.Sprintf("server backlog did not drain within %s before the sustained phase", settleLimit))
+			}
 		}
 		if spec.Kind == "prefill" {
 			limit := max(settleLimit, spec.Duration)
@@ -670,14 +685,20 @@ func summarize(report Report, cooldownRSS, cooldownHeap float64) Summary {
 		s.Gates = append(s.Gates, Gate{"sustained-query-load", queryOK, detail})
 	}
 	for _, t := range report.Trials {
-		if t.Spec.Kind != "prefill" {
-			continue
+		switch t.Spec.Kind {
+		case "prefill":
+			detail := fmt.Sprintf("backlog drained %.0fs after prefill", t.SettleSeconds)
+			if t.Unsettled {
+				detail = fmt.Sprintf("backlog still present %.0fs after prefill", t.SettleSeconds)
+			}
+			s.Gates = append(s.Gates, Gate{"prefill-settled", !t.Unsettled, detail})
+		case "sustained":
+			detail := fmt.Sprintf("backlog drained %.0fs before the sustained phase", t.SettleSeconds)
+			if t.Unsettled {
+				detail = fmt.Sprintf("backlog still present %.0fs before the sustained phase", t.SettleSeconds)
+			}
+			s.Gates = append(s.Gates, Gate{"sustained-settled", !t.Unsettled, detail})
 		}
-		detail := fmt.Sprintf("backlog drained %.0fs after prefill", t.SettleSeconds)
-		if t.Unsettled {
-			detail = fmt.Sprintf("backlog still present %.0fs after prefill", t.SettleSeconds)
-		}
-		s.Gates = append(s.Gates, Gate{"prefill-settled", !t.Unsettled, detail})
 	}
 	for _, gate := range s.Gates {
 		s.Passed = s.Passed && gate.Passed

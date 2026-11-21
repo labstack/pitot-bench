@@ -252,3 +252,22 @@ func TestSummarizeGatesPrefillSettling(t *testing.T) {
 		}
 	}
 }
+
+func TestSummarizeGatesSustainedSettling(t *testing.T) {
+	for _, unsettled := range []bool{false, true} {
+		report := Report{Trials: []Trial{{Spec: PhaseSpec{Name: "mixed-sustained", Kind: "sustained", Signal: Mixed}, Accepted: Counts{Spans: 100}, Unsettled: unsettled}}}
+		s := summarize(report, 0, 0)
+		var found bool
+		for _, g := range s.Gates {
+			if g.Name == "sustained-settled" {
+				found = true
+				if g.Passed == unsettled {
+					t.Fatalf("gate %+v for unsettled=%v", g, unsettled)
+				}
+			}
+		}
+		if !found || (unsettled && s.Passed) {
+			t.Fatalf("unsettled=%v passed=%v found=%v", unsettled, s.Passed, found)
+		}
+	}
+}
