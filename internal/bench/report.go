@@ -251,10 +251,7 @@ func reproductionRunCommand(c Config) string {
 		if c.DurationOverride > 0 {
 			parts = append(parts, "--duration "+c.DurationOverride.String())
 		}
-		parts = append(parts, prefillArgs(c)...)
-		if c.SustainedRate > 0 {
-			parts = append(parts, "--sustained-rate "+fmt.Sprint(c.SustainedRate))
-		}
+		parts = append(parts, loadArgs(c)...)
 		return strings.Join(parts, " ")
 	}
 	env := []string{"PITOT_BENCH_INGEST_TOKEN=…"}
@@ -275,8 +272,17 @@ func reproductionRunCommand(c Config) string {
 		env = append(env, "PITOT_BENCH_QUERY_COOKIE=…")
 		parts = append(parts, "--query-url "+shellQuote(c.QueryURL), "--query-rate "+fmt.Sprint(c.QueryRate))
 	}
-	parts = append(parts, prefillArgs(c)...)
+	parts = append(parts, loadArgs(c)...)
 	return strings.Join(append(env, parts...), " ")
+}
+
+// loadArgs are the phase-shaping flags both reproduction forms carry.
+func loadArgs(c Config) []string {
+	args := prefillArgs(c)
+	if c.SustainedRate > 0 {
+		args = append(args, "--sustained-rate "+fmt.Sprint(c.SustainedRate))
+	}
+	return args
 }
 
 func prefillArgs(c Config) []string {
