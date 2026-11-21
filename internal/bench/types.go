@@ -56,6 +56,9 @@ type Config struct {
 	WorkerOverride           int
 	RateOverride             float64
 	DurationOverride         time.Duration
+	Prefill                  time.Duration
+	PrefillProcesses         int
+	SustainedRate            float64
 	BatchSize                int
 	TelemetrygenVersion      string
 }
@@ -126,6 +129,9 @@ type Settings struct {
 	DataDir          string        `json:"data_dir,omitempty"`
 	QueryURL         string        `json:"query_url,omitempty"`
 	QueryRate        float64       `json:"query_rate,omitempty"`
+	PrefillSeconds   float64       `json:"prefill_seconds,omitempty"`
+	PrefillProcesses int           `json:"prefill_processes,omitempty"`
+	SustainedRate    float64       `json:"sustained_rate,omitempty"`
 	BatchSize        int           `json:"batch_size"`
 	TraceChildSpans  int           `json:"trace_child_spans"`
 	Methodology      string        `json:"methodology"`
@@ -163,6 +169,8 @@ type ResourceSample struct {
 	CompactionRetiredBatchesTotal  float64            `json:"compaction_retired_batches_total,omitempty"`
 	CompactionPassSecondsTotal     float64            `json:"compaction_pass_seconds_total,omitempty"`
 	CompactionBacklogBatches       float64            `json:"compaction_backlog_batches,omitempty"`
+	ReadCachePendingBatches        float64            `json:"read_cache_pending_batches,omitempty"`
+	RollupRows                     map[string]float64 `json:"rollup_rows,omitempty"`
 }
 
 type Latency struct {
@@ -200,6 +208,8 @@ type GeneratorCPU struct {
 }
 
 type Trial struct {
+	SettleSeconds       float64          `json:"settle_seconds,omitempty"`
+	Unsettled           bool             `json:"unsettled,omitempty"`
 	Read                *ReadEvidence    `json:"read_evidence,omitempty"`
 	Spec                PhaseSpec        `json:"settings"`
 	StartedAt           time.Time        `json:"started_at"`

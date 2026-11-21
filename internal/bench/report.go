@@ -199,7 +199,7 @@ func Markdown(r Report) string {
 	for _, warning := range r.Summary.Warnings {
 		fmt.Fprintf(&b, "- %s\n", warning)
 	}
-	fmt.Fprintf(&b, "\n## Reproduce\n\n```sh\n%s\n```\n\nRaw evidence: `report.json` (authoritative structured report) and `samples.jsonl` (time-series resource samples, including cumulative `ingest_rows_total` by signal (`spans`, `logs`, `metrics`), `rollup_seconds`, `write_gate_hold_seconds`, `write_gate_wait_seconds`, `compaction_seconds_total`, `compactions_total`, `publish_wait_seconds_total`, `ingest_backpressure_seconds_total`, `ingest_throttled_total`, `ingest_admission_rows_per_second`, `compaction_retired_batches_total`, and `compaction_pass_seconds_total`, plus the current `compaction_backlog_batches` gauge when available).\n", r.ReproductionCommand)
+	fmt.Fprintf(&b, "\n## Reproduce\n\n```sh\n%s\n```\n\nRaw evidence: `report.json` (authoritative structured report) and `samples.jsonl` (time-series resource samples, including cumulative `ingest_rows_total` by signal (`spans`, `logs`, `metrics`), `rollup_seconds`, `write_gate_hold_seconds`, `write_gate_wait_seconds`, `compaction_seconds_total`, `compactions_total`, `publish_wait_seconds_total`, `ingest_backpressure_seconds_total`, `ingest_throttled_total`, `ingest_admission_rows_per_second`, `compaction_retired_batches_total`, and `compaction_pass_seconds_total`, plus the current `compaction_backlog_batches` and `read_cache_pending_batches` gauges and cumulative `rollup_rows` by rollup when available).\n", r.ReproductionCommand)
 	return b.String()
 }
 
@@ -251,6 +251,7 @@ func reproductionRunCommand(c Config) string {
 		if c.DurationOverride > 0 {
 			parts = append(parts, "--duration "+c.DurationOverride.String())
 		}
+		parts = append(parts, loadArgs(c)...)
 		return strings.Join(parts, " ")
 	}
 	env := []string{"PITOT_BENCH_INGEST_TOKEN=…"}
@@ -271,7 +272,24 @@ func reproductionRunCommand(c Config) string {
 		env = append(env, "PITOT_BENCH_QUERY_COOKIE=…")
 		parts = append(parts, "--query-url "+shellQuote(c.QueryURL), "--query-rate "+fmt.Sprint(c.QueryRate))
 	}
+	parts = append(parts, loadArgs(c)...)
 	return strings.Join(append(env, parts...), " ")
+}
+
+// loadArgs are the phase-shaping flags both reproduction forms carry.
+func loadArgs(c Config) []string {
+	args := prefillArgs(c)
+	if c.SustainedRate > 0 {
+		args = append(args, "--sustained-rate "+fmt.Sprint(c.SustainedRate))
+	}
+	return args
+}
+
+func prefillArgs(c Config) []string {
+	if c.Prefill <= 0 {
+		return nil
+	}
+	return []string{"--prefill " + c.Prefill.String(), "--prefill-processes " + fmt.Sprint(c.PrefillProcesses)}
 }
 
 func shellQuote(v string) string { return "'" + strings.ReplaceAll(v, "'", "'\\''") + "'" }
@@ -281,6 +299,9 @@ func phaseIcon(kind string) string {
 	}
 	if kind == "sustained" {
 		return "◆"
+	}
+	if kind == "prefill" {
+		return "▪"
 	}
 	return "◇"
 }

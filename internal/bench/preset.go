@@ -67,6 +67,18 @@ func Plan(cfg Config) ([]PhaseSpec, error) {
 		}
 	}
 	phases := []PhaseSpec{makePhase("warmup", "warmup", Mixed, s.warmup, 1, 1)}
+	if cfg.Prefill < 0 {
+		return nil, fmt.Errorf("prefill must not be negative")
+	}
+	if cfg.Prefill > 0 {
+		if cfg.PrefillProcesses <= 0 {
+			return nil, fmt.Errorf("prefill processes must be positive")
+		}
+		// Read cost scales with retained data, so a read gate measured on a
+		// nearly empty server is optimistic. Prefill populates the store
+		// without read load before any measured phase.
+		phases = append(phases, makePhase("prefill", "prefill", Mixed, cfg.Prefill, cfg.PrefillProcesses, 1))
+	}
 	for repetition := 1; repetition <= cfg.Repeat; repetition++ {
 		for _, signal := range Signals {
 			if cfg.SignalSelection == "mixed" {
@@ -88,6 +100,15 @@ func Plan(cfg Config) ([]PhaseSpec, error) {
 	// mixed throughput from the sweep, then prove it over a longer window.
 	sustained := makePhase("mixed-sustained", "sustained", Mixed, s.sustain, 0, 1)
 	sustained.QueryRate = cfg.QueryRate
+	if cfg.SustainedRate < 0 {
+		return nil, fmt.Errorf("sustained rate must not be negative")
+	}
+	if cfg.SustainedRate > 0 {
+		// A fixed target rate measures reads at a stated ingest load rather
+		// than at whatever the sweep found the host could absorb.
+		sustained.ProcessesPerSignal = 1
+		sustained.RatePerWorker = cfg.SustainedRate / float64(len(Signals)*s.workers)
+	}
 	phases = append(phases, sustained)
 	return phases, nil
 }

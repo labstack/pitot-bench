@@ -96,10 +96,33 @@ func (r *Runner) Run(ctx context.Context) (*Report, error) {
 			spec.ProcessesPerSignal = best
 			plan[i] = spec
 		}
+		// The sweep's overload points leave rollup and read-cache backlog
+		// behind; the sustained phase measures steady state, so it starts only
+		// once that backlog has drained.
+		var preSettle float64
+		var preUnsettled bool
+		if spec.Kind == "sustained" {
+			preSettle, preUnsettled = r.settle(ctx, settleLimit)
+			fmt.Fprintf(r.Out, "\n     settled in %.0fs before sustained (unsettled=%v)", preSettle, preUnsettled)
+		}
 		fmt.Fprintf(r.Out, "\n  %s  %-18s offered %s items/s for %s\n", phaseIcon(spec.Kind), spec.Name, formatNumber(spec.OfferedPerSecond()), spec.Duration)
 		trial, err := r.runPhase(ctx, spec, report.Trials)
 		if err != nil {
 			return r.abandon(report, fmt.Errorf("phase %s: %w", spec.Name, err))
+		}
+		if spec.Kind == "sustained" {
+			trial.SettleSeconds, trial.Unsettled = preSettle, preUnsettled
+			if preUnsettled {
+				trial.ClassificationNotes = append(trial.ClassificationNotes, fmt.Sprintf("server backlog did not drain within %s before the sustained phase", settleLimit))
+			}
+		}
+		if spec.Kind == "prefill" {
+			limit := max(settleLimit, spec.Duration)
+			trial.SettleSeconds, trial.Unsettled = r.settle(ctx, limit)
+			if trial.Unsettled {
+				trial.ClassificationNotes = append(trial.ClassificationNotes, fmt.Sprintf("server backlog did not drain within %s after prefill", limit))
+			}
+			fmt.Fprintf(r.Out, "     settled in %.0fs (unsettled=%v)\n", trial.SettleSeconds, trial.Unsettled)
 		}
 		report.Trials = append(report.Trials, trial)
 		report.Settings.Methodology += r.readSummary
@@ -285,6 +308,9 @@ func (r *Runner) runPhase(ctx context.Context, spec PhaseSpec, previous []Trial)
 		trial.Read = queries.readEvidence()
 	}
 	trial.Classification, trial.ClassificationNotes = classify(trial, previous)
+	if spec.Kind == "prefill" {
+		trial.Classification = "prefill"
+	}
 	r.readSummary = queries.operationSummary(spec.Name)
 	if trial.Spec.QueryRate > 0 && !queryTargetMet(trial) {
 		trial.ClassificationNotes = append(trial.ClassificationNotes, "read qualification goals were not met: "+strings.Join(readGateFailures(trial), "; "))
@@ -447,6 +473,8 @@ func resourceSample(s *snapshot, at float64) ResourceSample {
 		CompactionRetiredBatchesTotal:  s.total("pitot_compaction_retired_batches_total", nil),
 		CompactionPassSecondsTotal:     s.total("pitot_compaction_pass_seconds_sum", nil),
 		CompactionBacklogBatches:       s.total("pitot_compaction_backlog_batches", nil),
+		ReadCachePendingBatches:        s.total("pitot_read_cache_pending_batches", nil),
+		RollupRows:                     sampleTotalsByLabel(s, "pitot_rollup_component_rows_total", "rollup"),
 	}
 }
 
@@ -585,7 +613,7 @@ func missingQueryKinds(t Trial) []string {
 func summarize(report Report, cooldownRSS, cooldownHeap float64) Summary {
 	s := Summary{CooldownRSS: cooldownRSS, CooldownHeap: cooldownHeap, Passed: true}
 	for _, trial := range report.Trials {
-		if trial.Spec.Kind != "warmup" {
+		if trial.Spec.Kind != "warmup" && trial.Spec.Kind != "prefill" {
 			s.Accepted.Spans += trial.Accepted.Spans
 			s.Accepted.LogRecords += trial.Accepted.LogRecords
 			s.Accepted.MetricPoints += trial.Accepted.MetricPoints
@@ -656,6 +684,22 @@ func summarize(report Report, cooldownRSS, cooldownHeap float64) Summary {
 		}
 		s.Gates = append(s.Gates, Gate{"sustained-query-load", queryOK, detail})
 	}
+	for _, t := range report.Trials {
+		switch t.Spec.Kind {
+		case "prefill":
+			detail := fmt.Sprintf("backlog drained %.0fs after prefill", t.SettleSeconds)
+			if t.Unsettled {
+				detail = fmt.Sprintf("backlog still present %.0fs after prefill", t.SettleSeconds)
+			}
+			s.Gates = append(s.Gates, Gate{"prefill-settled", !t.Unsettled, detail})
+		case "sustained":
+			detail := fmt.Sprintf("backlog drained %.0fs before the sustained phase", t.SettleSeconds)
+			if t.Unsettled {
+				detail = fmt.Sprintf("backlog still present %.0fs before the sustained phase", t.SettleSeconds)
+			}
+			s.Gates = append(s.Gates, Gate{"sustained-settled", !t.Unsettled, detail})
+		}
+	}
 	for _, gate := range s.Gates {
 		s.Passed = s.Passed && gate.Passed
 	}
@@ -685,6 +729,7 @@ func settingsFrom(c Config) Settings {
 		SampleInterval: c.SampleInterval, SampleSeconds: c.SampleInterval.Seconds(), GeneratorTimeout: c.GeneratorTimeout,
 		TimeoutSeconds: c.GeneratorTimeout.Seconds(), Cooldown: c.Cooldown, CooldownSeconds: c.Cooldown.Seconds(), DataDir: c.DataDir,
 		QueryURL: c.QueryURL, QueryRate: c.QueryRate, BatchSize: c.BatchSize, TraceChildSpans: 1,
+		PrefillSeconds: c.Prefill.Seconds(), PrefillProcesses: prefillProcesses(c), SustainedRate: c.SustainedRate,
 		Methodology: "Pitot server-side accepted-row counter deltas divided by measured wall time; telemetrygen emits one parent and one child span per trace tick. " +
 			"Split runs bracket each phase with generator-host /proc/stat reads over the generator SSH setup, including startup and export draining. " +
 			"Generator CPU cores = logical CPUs × (total tick delta − idle and iowait tick delta) / total tick delta; guest ticks are not counted twice. " +
@@ -856,4 +901,56 @@ func generatorProcessDetail(ok bool, trials []Trial) string {
 		}
 	}
 	return detail
+}
+
+func prefillProcesses(c Config) int {
+	if c.Prefill <= 0 {
+		return 0
+	}
+	return c.PrefillProcesses
+}
+
+// settleLimit is the shortest post-prefill wait. The wait may last as long as
+// the prefill itself: a fast prefill compresses hours of ingest, and a server
+// that cannot drain the resulting backlog in that time would carry prefill
+// work into every measured phase.
+var settleLimit, settlePoll = 10 * time.Minute, 5 * time.Second
+
+// settle waits until the ingest queue, rollup catch-up backlog and read-cache
+// pending batches are exported and empty in two consecutive scrapes, so
+// measured phases do not inherit prefill work. Reads of uncached batches scan
+// raw Parquet, so a lagging read cache would make measured reads pessimistic. An absent gauge never counts as drained. Compaction backlog is
+// not a condition: it includes underfilled groups and need not reach zero.
+func (r *Runner) settle(ctx context.Context, limit time.Duration) (float64, bool) {
+	started := time.Now()
+	clean := 0
+	for time.Since(started) < limit {
+		if snap, err := r.scrape(ctx); err == nil && drained(snap, "pitot_ingest_queue_depth") && drained(snap, "pitot_rollup_backlog_chunks") && drained(snap, "pitot_read_cache_pending_batches") {
+			clean++
+			if clean == 2 {
+				return round(time.Since(started).Seconds(), 1), false
+			}
+		} else {
+			clean = 0
+		}
+		select {
+		case <-ctx.Done():
+			return round(time.Since(started).Seconds(), 1), true
+		case <-time.After(settlePoll):
+		}
+	}
+	return round(time.Since(started).Seconds(), 1), true
+}
+
+func drained(s *snapshot, name string) bool {
+	present := false
+	for _, v := range s.samples {
+		if v.name == name {
+			present = true
+			if v.value != 0 {
+				return false
+			}
+		}
+	}
+	return present
 }
