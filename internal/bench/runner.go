@@ -474,6 +474,7 @@ func resourceSample(s *snapshot, at float64) ResourceSample {
 		CompactionPassSecondsTotal:     s.total("pitot_compaction_pass_seconds_sum", nil),
 		CompactionBacklogBatches:       s.total("pitot_compaction_backlog_batches", nil),
 		ReadCachePendingBatches:        s.total("pitot_read_cache_pending_batches", nil),
+		ReadCachePendingSpans:          s.total("pitot_read_cache_pending_spans", nil),
 		RollupRows:                     sampleTotalsByLabel(s, "pitot_rollup_component_rows_total", "rollup"),
 	}
 }
